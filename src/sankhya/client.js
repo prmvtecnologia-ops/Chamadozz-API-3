@@ -222,44 +222,36 @@ async function criarChamado(chamado) {
   const meta = chamado.metadados || {}
   const hoje = fmtDate()
 
-  const campos = {
-    IDCHAMADO:    String(chamado.id || '').substring(0, 29),
-    TIPO:         String(chamado.tipo || '').substring(0, 29),
-    TITULO:       String(chamado.titulo || '').substring(0, 98).replace(/'/g, "''"),
-    STATUS:       String(chamado.status || 'aguardando').substring(0, 19),
-    VALOR:        Number(chamado.valor || 0),
-    SOLICITANTE:  String(chamado.solicitante || '').substring(0, 98).replace(/'/g, "''"),
-    EMAILSOLICIT: String(chamado.email || '').substring(0, 98),
-    AUTOREMAIL:   String(chamado.autor_email || '').substring(0, 98),
-    AUTORNOME:    String(chamado.autor_nome || '').substring(0, 98).replace(/'/g, "''"),
-    APROVADOR:    String(chamado.aprovador || '').substring(0, 98).replace(/'/g, "''"),
-    CENTROCUSTO:  String(chamado.centro_custo || '').substring(0, 98),
-    OBS:          String(chamado.obs || '').substring(0, 998).replace(/'/g, "''"),
-    DTABERTURA:   `TO_DATE('${hoje}','DD/MM/YYYY')`,
-    DTATUALIZACAO:`TO_DATE('${hoje}','DD/MM/YYYY')`,
-    SYNKOK:       'S',
-  }
+  const fields = [
+    { name: 'IDCHAMADO',    $: String(chamado.id || '').substring(0,29) },
+    { name: 'TIPO',         $: String(chamado.tipo || '').substring(0,29) },
+    { name: 'TITULO',       $: String(chamado.titulo || '').substring(0,98) },
+    { name: 'STATUS',       $: String(chamado.status || 'aguardando') },
+    { name: 'VALOR',        $: String(Number(chamado.valor || 0).toFixed(2)) },
+    { name: 'SOLICITANTE',  $: String(chamado.solicitante || '').substring(0,98) },
+    { name: 'EMAILSOLICIT', $: String(chamado.email || '').substring(0,98) },
+    { name: 'AUTOREMAIL',   $: String(chamado.autor_email || '').substring(0,98) },
+    { name: 'AUTORNOME',    $: String(chamado.autor_nome || '').substring(0,98) },
+    { name: 'APROVADOR',    $: String(chamado.aprovador || '').substring(0,98) },
+    { name: 'CENTROCUSTO',  $: String(chamado.centro_custo || '').substring(0,98) },
+    { name: 'OBS',          $: String(chamado.obs || '').substring(0,998) },
+    { name: 'DTABERTURA',   $: hoje },
+    { name: 'DTATUALIZACAO',$: hoje },
+    { name: 'SYNKOK',       $: 'S' },
+    ...buildMetaCampos(chamado.tipo, meta),
+  ].filter(f => f.$ !== '')
 
-  // Adiciona metadados por tipo
-  const meta_campos = buildMetaCampos(chamado.tipo, meta)
-  meta_campos.forEach(f => {
-    if (f.$ && f.$ !== '') campos[f.name] = String(f.$).substring(0, 98).replace(/'/g, "''")
-  })
+  console.log('[Sankhya] criarChamado campos:', fields.map(f => f.name).join(', '))
 
-  const colNames = Object.keys(campos).join(', ')
-  const colVals  = Object.entries(campos).map(([k, v]) => {
-    if (k === 'DTABERTURA' || k === 'DTATUALIZACAO') return v
-    if (k === 'VALOR') return v
-    return `'${v}'`
-  }).join(', ')
+  // Monta como objeto chave:valor (formato alternativo do saveRecord)
+  const fieldObj = {}
+  fields.forEach(f => { fieldObj[f.name] = { $: f.$ } })
 
-  const sql = `INSERT INTO AD_CHAMADO (NUSEQ, ${colNames}) VALUES (GEN_AD_CHAMADO.NEXTVAL, ${colVals})`
-
-  console.log('[Sankhya] SQL:', sql.substring(0, 300))
-
-  return sankhyaRequest('DbExplorerSP.executeQuery', {
-    sql: { $: sql }
+  return sankhyaRequest('CRUDServiceProvider.saveRecord', {
+    dataSet: {
+      rootEntity: 'AD_CHAMADO',
+      includePresentationFields: 'N',
+      dataRow: { localFields: fieldObj },
+    },
   })
 }
-
-
