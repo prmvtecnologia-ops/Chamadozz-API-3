@@ -36,8 +36,17 @@ async function getJWT() {
   })
 
   const data = await res.json()
-  const jwt  = data?.responseBody?.jsessionid?.$
-  if (!jwt) throw new Error('Sankhya login falhou: ' + JSON.stringify(data).substring(0, 200))
+  let jwt = data?.responseBody?.jsessionid?.$
+  if (!jwt) {
+    const setCookie = res.headers.get('set-cookie')
+    console.log('[Sankhya] Login body:', JSON.stringify(data).substring(0, 300))
+    console.log('[Sankhya] set-cookie:', setCookie?.substring(0, 150))
+    if (setCookie) {
+      const match = setCookie.match(/JSESSIONID=([^;]+)/)
+      if (match) jwt = match[1]
+    }
+  }
+  if (!jwt) throw new Error('Sankhya: JWT nao encontrado: ' + JSON.stringify(data).substring(0, 300))
 
   cachedJWT    = jwt
   jwtExpiresAt = Date.now() + 25 * 60 * 1000
