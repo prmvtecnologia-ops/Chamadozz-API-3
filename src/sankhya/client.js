@@ -80,13 +80,14 @@ async function criarChamado(chamado) {
     { name: 'TIPO',         $: String(chamado.tipo || '') },
     { name: 'TITULO',       $: String(chamado.titulo || '').substring(0, 98) },
     { name: 'STATUS',       $: String(chamado.status || 'aguardando') },
-    { name: 'VALOR',        $: Number(chamado.valor || 0) },
+    { name: 'VALOR',        $: String(Number(chamado.valor || 0).toFixed(2)) },
     { name: 'SOLICITANTE',  $: String(chamado.solicitante || '').substring(0, 98) },
     { name: 'EMAILSOLICIT', $: String(chamado.email || '').substring(0, 98) },
     { name: 'AUTOREMAIL',   $: String(chamado.autor_email || '').substring(0, 98) },
     { name: 'AUTORNOME',    $: String(chamado.autor_nome || '').substring(0, 98) },
     { name: 'SYNKOK',       $: 'S' },
-    ...buildMetaCampos(chamado.tipo, meta),
+  // Temporariamente sem metadados para isolar NPE
+  // ...buildMetaCampos(chamado.tipo, meta),
   ]
 
   console.log('[Sankhya] criarChamado campos:', fields.map(f => f.name).join(', '))
