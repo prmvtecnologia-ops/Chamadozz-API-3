@@ -219,29 +219,17 @@ function buildMetaCampos(tipo, meta) {
 
 module.exports = { criarChamado, atualizarStatus, buscarNuseq }// ── Criar registro na AD_CHAMADO ──────────────────────────────────────────────
 async function criarChamado(chamado) {
-  const meta = chamado.metadados || {}
-
   const p = (v, max=98) => String(v || '').substring(0, max).replace(/'/g, "''")
+  const n = (v) => Number(v || 0)
 
-  const sql = `BEGIN PRC_INSERT_AD_CHAMADO(
-    '${p(chamado.id, 29)}',
-    '${p(chamado.tipo, 29)}',
-    '${p(chamado.titulo)}',
-    '${p(chamado.status || 'aguardando', 19)}',
-    ${Number(chamado.valor || 0)},
-    '${p(chamado.solicitante)}',
-    '${p(chamado.email)}',
-    '${p(chamado.autor_email)}',
-    '${p(chamado.autor_nome)}',
-    '${p(chamado.aprovador)}',
-    '${p(chamado.centro_custo)}',
-    '${p(chamado.obs, 998)}'
-  ); END;`
+  // Chama a procedure via bloco PL/SQL anônimo
+  const sql = `CALL PRC_INSERT_AD_CHAMADO('${p(chamado.id,29)}','${p(chamado.tipo,29)}','${p(chamado.titulo)}','${p(chamado.status||'aguardando',19)}',${n(chamado.valor)},'${p(chamado.solicitante)}','${p(chamado.email)}','${p(chamado.autor_email)}','${p(chamado.autor_nome)}','${p(chamado.aprovador)}','${p(chamado.centro_custo)}','${p(chamado.obs,998)}')`
 
-  console.log('[Sankhya] Chamando PRC_INSERT_AD_CHAMADO para', chamado.id)
+  console.log('[Sankhya] Chamando procedure para', chamado.id)
 
-  return sankhyaRequest('SnkExecProcSP.executeProc', {
-    procedure: { $: sql }
+  return sankhyaRequest('DbExplorerSP.executeQuery', {
+    sql: { $: sql },
+    parameters: { $: '' }
   })
 }
 
