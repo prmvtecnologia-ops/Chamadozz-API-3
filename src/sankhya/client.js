@@ -29,7 +29,7 @@ async function getJWT() {
       serviceName: 'MobileLoginSP.login',
       requestBody: {
         NOMUSU: { $: USERNAME },
-        SENHA:  { $: PASSWORD },
+        INTERNO: { $: PASSWORD },
         KEEPCONNECTED: { $: 'S' },
       },
     }),
