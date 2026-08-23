@@ -58,17 +58,31 @@ async function getJWT() {
 async function sankhyaRequest(serviceName, requestBody) {
   const jwt = await getJWT()
 
-  const res = await fetch(`${BASE_URL}/mge/service.sbr?serviceName=${serviceName}&outputType=json`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cookie': `JSESSIONID=${jwt}`,
-    },
-    body: JSON.stringify({ serviceName, requestBody }),
-  })
+  console.log(`[Sankhya] Chamando ${serviceName}...`)
 
-  const data = await res.json()
-  console.log('[Sankhya] Resposta:', JSON.stringify(data).substring(0, 400))
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15000)
+
+  let res
+  try {
+    res = await fetch(`${BASE_URL}/mge/service.sbr?serviceName=${serviceName}&outputType=json`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': `JSESSIONID=${jwt}`,
+      },
+      body: JSON.stringify({ serviceName, requestBody }),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+
+  const text = await res.text()
+  console.log(`[Sankhya] Resposta ${serviceName} (${res.status}):`, text.substring(0, 500))
+
+  let data
+  try { data = JSON.parse(text) } catch(e) { throw new Error(`Sankhya resposta inválida: ${text.substring(0,200)}`) }
 
   if (data?.status === '1' || data?.responseBody) return data
   const errMsg = JSON.stringify(data?.statusMessage || data?.error || data)
