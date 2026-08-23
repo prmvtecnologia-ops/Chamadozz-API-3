@@ -95,6 +95,7 @@ async function criarChamado(chamado) {
   const hoje = fmtDate()
 
   const fields = [
+    { name: 'NUSEQ',        $: '0' },
     { name: 'IDCHAMADO',    $: String(chamado.id || '') },
     { name: 'TIPO',         $: String(chamado.tipo || '') },
     { name: 'TITULO',       $: String(chamado.titulo || '').substring(0, 98) },
