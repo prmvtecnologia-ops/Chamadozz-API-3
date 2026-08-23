@@ -3,9 +3,15 @@ const bcrypt = require('bcryptjs')
 const pool = require('../db/pool')
 const { requireAuth, requireAdmin } = require('../middleware/auth')
 
-const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN || 'eduzz.com'
+const ALLOWED_DOMAINS = (process.env.ALLOWED_DOMAIN || 'eduzz.com')
+  .split(',').map(d => d.trim().toLowerCase())
 
-// GET /usuarios — lista todos (admin)
+function domainAllowed(email) {
+  const domain = email.trim().toLowerCase().split('@')[1]
+  return ALLOWED_DOMAINS.includes(domain)
+}
+
+// GET /usuarios
 router.get('/', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -17,15 +23,13 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
   }
 })
 
-// POST /usuarios — cria usuário (admin)
+// POST /usuarios
 router.post('/', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { email, nome, senha, role = 'user' } = req.body
     if (!email || !nome || !senha) return res.status(400).json({ error: 'email, nome e senha são obrigatórios.' })
     if (senha.length < 6) return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres.' })
-
-    const domain = email.trim().toLowerCase().split('@')[1]
-    if (domain !== ALLOWED_DOMAIN) return res.status(400).json({ error: `Apenas @${ALLOWED_DOMAIN}.` })
+    if (!domainAllowed(email)) return res.status(400).json({ error: 'Apenas @eduzz.com ou @eduzz.com.br.' })
     if (!['user', 'admin'].includes(role)) return res.status(400).json({ error: 'Role inválido.' })
 
     const hash = await bcrypt.hash(senha, 12)
@@ -43,7 +47,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
   }
 })
 
-// PATCH /usuarios/:id/role — promove/rebaixa (admin)
+// PATCH /usuarios/:id/role
 router.patch('/:id/role', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { role } = req.body
@@ -61,7 +65,7 @@ router.patch('/:id/role', requireAuth, requireAdmin, async (req, res) => {
   }
 })
 
-// PATCH /usuarios/:id/ativo — ativa/desativa (admin)
+// PATCH /usuarios/:id/ativo
 router.patch('/:id/ativo', requireAuth, requireAdmin, async (req, res) => {
   try {
     if (String(req.params.id) === String(req.user.id)) return res.status(400).json({ error: 'Você não pode desativar sua própria conta.' })
