@@ -48,7 +48,7 @@ async function getJWT() {
 async function sankhyaRequest(serviceName, requestBody) {
   const jwt = await getJWT()
 
-  const res = await fetch(`${BASE_URL}/mge/service.sbr?serviceName=${serviceName}&outputType=json`, {
+  const res = await fetch(`${BASE_URL}/gateway/v1/mge/service.sbr?serviceName=${serviceName}&outputType=json`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
