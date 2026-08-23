@@ -4,10 +4,16 @@ const jwt = require('jsonwebtoken')
 const pool = require('../db/pool')
 const { requireAuth } = require('../middleware/auth')
 
-const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN || 'eduzz.com'
+const ALLOWED_DOMAINS = (process.env.ALLOWED_DOMAIN || 'eduzz.com')
+  .split(',').map(d => d.trim().toLowerCase())
 
 function signToken(userId) {
   return jwt.sign({ sub: userId }, process.env.JWT_SECRET, { expiresIn: '8h' })
+}
+
+function domainAllowed(email) {
+  const domain = email.trim().toLowerCase().split('@')[1]
+  return ALLOWED_DOMAINS.includes(domain)
 }
 
 // POST /auth/login
@@ -17,9 +23,8 @@ router.post('/login', async (req, res) => {
     if (!email || !senha) return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' })
 
     const normalEmail = email.trim().toLowerCase()
-    const domain = normalEmail.split('@')[1]
-    if (domain !== ALLOWED_DOMAIN) {
-      return res.status(403).json({ error: `Apenas e-mails @${ALLOWED_DOMAIN} são permitidos.` })
+    if (!domainAllowed(normalEmail)) {
+      return res.status(403).json({ error: `Apenas e-mails @eduzz.com ou @eduzz.com.br são permitidos.` })
     }
 
     const { rows } = await pool.query('SELECT * FROM usuarios WHERE email = $1', [normalEmail])
@@ -31,7 +36,6 @@ router.post('/login', async (req, res) => {
     const ok = await bcrypt.compare(senha, user.senha_hash)
     if (!ok) return res.status(401).json({ error: 'Senha incorreta.' })
 
-    // Atualiza último acesso
     await pool.query('UPDATE usuarios SET ultimo_acesso = NOW() WHERE id = $1', [user.id])
 
     const token = signToken(user.id)
@@ -45,7 +49,7 @@ router.post('/login', async (req, res) => {
   }
 })
 
-// GET /auth/me — valida token e retorna usuário atual
+// GET /auth/me
 router.get('/me', requireAuth, (req, res) => {
   const { id, email, nome, role } = req.user
   res.json({ id, email, nome, role })
