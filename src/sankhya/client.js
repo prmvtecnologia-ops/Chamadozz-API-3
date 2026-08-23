@@ -1,7 +1,6 @@
 /**
  * sankhya/client.js
- * Integração com API REST Sankhya SaaS
- * Entidade: AD_CHAMADO
+ * Integração com API REST Sankhya SaaS — Entidade AD_CHAMADO
  */
 
 const BASE_URL = 'https://api.sankhya.com.br'
@@ -13,6 +12,12 @@ const PASSWORD = process.env.SANKHYA_PASS
 let cachedJWT    = null
 let jwtExpiresAt = 0
 
+function fmtDate(d) {
+  if (!d) return ''
+  const dt = d instanceof Date ? d : new Date()
+  return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`
+}
+
 // ── Autenticação ──────────────────────────────────────────────────
 async function getJWT() {
   if (cachedJWT && Date.now() < jwtExpiresAt) return cachedJWT
@@ -20,10 +25,10 @@ async function getJWT() {
   const res = await fetch(`${BASE_URL}/login`, {
     method: 'POST',
     headers: {
-      'appkey':    APP_KEY,
-      'token':     TOKEN,
-      'username':  USERNAME,
-      'password':  PASSWORD,
+      'appkey':   APP_KEY,
+      'token':    TOKEN,
+      'username': USERNAME,
+      'password': PASSWORD,
     },
   })
 
@@ -33,13 +38,11 @@ async function getJWT() {
   }
 
   const data = await res.json()
-
-  // O Sankhya retorna o JWT no header ou no body dependendo da versão
   const jwt = data.bearerToken || data.token || res.headers.get('bearerToken')
-  if (!jwt) throw new Error('Sankhya: JWT não encontrado na resposta de login: ' + JSON.stringify(data))
+  if (!jwt) throw new Error('Sankhya: JWT não encontrado: ' + JSON.stringify(data))
 
   cachedJWT    = jwt
-  jwtExpiresAt = Date.now() + 25 * 60 * 1000 // 25 min
+  jwtExpiresAt = Date.now() + 25 * 60 * 1000
   console.log('[Sankhya] Login OK, JWT obtido')
   return jwt
 }
@@ -60,43 +63,38 @@ async function sankhyaRequest(serviceName, requestBody) {
   })
 
   const data = await res.json()
+  console.log('[Sankhya] Resposta:', JSON.stringify(data).substring(0, 300))
 
   if (data?.status === '1' || data?.responseBody) return data
-  throw new Error(`Sankhya [${serviceName}] erro: ${JSON.stringify(data?.statusMessage || data)}`)
+  const errMsg = JSON.stringify(data?.statusMessage || data?.error || data)
+  throw new Error(`Sankhya [${serviceName}] erro: ${errMsg}`)
 }
 
 // ── Criar registro na AD_CHAMADO ──────────────────────────────────
 async function criarChamado(chamado) {
   const meta = chamado.metadados || {}
-  const hoje = new Date().toLocaleDateString('pt-BR') // DD/MM/YYYY — formato Sankhya
+  const hoje = fmtDate(new Date())
 
   const fields = [
-    // Identificação
-    { name: 'IDCHAMADO',    $: chamado.id },
-    { name: 'TIPO',         $: chamado.tipo },
-    { name: 'TITULO',       $: chamado.titulo },
-    { name: 'STATUS',       $: chamado.status || 'aguardando' },
-    { name: 'VALOR',        $: String(chamado.valor) },
-
-    // Solicitante
-    { name: 'SOLICITANTE',  $: chamado.solicitante },
-    { name: 'EMAILSOLICIT', $: chamado.email },
-    { name: 'AUTOREMAIL',   $: chamado.autor_email },
-    { name: 'AUTORNOME',    $: chamado.autor_nome },
-
-    // Aprovação
-    { name: 'APROVADOR',    $: chamado.aprovador    || '' },
-    { name: 'CENTROCUSTO',  $: chamado.centro_custo || '' },
-    { name: 'OBS',          $: chamado.obs          || '' },
-
-    // Datas
+    { name: 'IDCHAMADO',    $: String(chamado.id || '') },
+    { name: 'TIPO',         $: String(chamado.tipo || '') },
+    { name: 'TITULO',       $: String(chamado.titulo || '') },
+    { name: 'STATUS',       $: String(chamado.status || 'aguardando') },
+    { name: 'VALOR',        $: String(chamado.valor || 0) },
+    { name: 'SOLICITANTE',  $: String(chamado.solicitante || '') },
+    { name: 'EMAILSOLICIT', $: String(chamado.email || '') },
+    { name: 'AUTOREMAIL',   $: String(chamado.autor_email || '') },
+    { name: 'AUTORNOME',    $: String(chamado.autor_nome || '') },
+    { name: 'APROVADOR',    $: String(chamado.aprovador    || '') },
+    { name: 'CENTROCUSTO',  $: String(chamado.centro_custo || '') },
+    { name: 'OBS',          $: String(chamado.obs          || '') },
     { name: 'DTABERTURA',   $: hoje },
     { name: 'DTATUALIZACAO',$: hoje },
     { name: 'SYNKOK',       $: 'S' },
-
-    // Metadados por tipo
     ...buildMetaCampos(chamado.tipo, meta),
   ]
+
+  console.log('[Sankhya] criarChamado campos:', fields.map(f => f.name).join(', '))
 
   return sankhyaRequest('CRUDServiceProvider.saveRecord', {
     dataSet: {
@@ -111,7 +109,7 @@ async function criarChamado(chamado) {
 
 // ── Atualizar status na AD_CHAMADO ────────────────────────────────
 async function atualizarStatus(nuseq, id, status) {
-  const hoje = new Date().toLocaleDateString('pt-BR')
+  const hoje = fmtDate(new Date())
   return sankhyaRequest('CRUDServiceProvider.saveRecord', {
     dataSet: {
       rootEntity: 'AD_CHAMADO',
@@ -120,7 +118,7 @@ async function atualizarStatus(nuseq, id, status) {
         localFields: {
           field: [
             { name: 'NUSEQ',         $: String(nuseq) },
-            { name: 'STATUS',        $: status },
+            { name: 'STATUS',        $: String(status) },
             { name: 'DTATUALIZACAO', $: hoje },
           ],
         },
@@ -129,7 +127,7 @@ async function atualizarStatus(nuseq, id, status) {
   })
 }
 
-// ── Buscar NUSEQ pelo IDCHAMADO (para update) ─────────────────────
+// ── Buscar NUSEQ pelo IDCHAMADO ───────────────────────────────────
 async function buscarNuseq(idChamado) {
   const data = await sankhyaRequest('CRUDServiceProvider.loadRecords', {
     dataSet: {
