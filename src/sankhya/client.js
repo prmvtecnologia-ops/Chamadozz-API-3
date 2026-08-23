@@ -135,6 +135,7 @@ async function buscarNuseq(idChamado) {
     dataSet: {
       rootEntity: 'AD_CHAMADO',
       includePresentationFields: 'N',
+      offsetPage: '0',
       criteria: {
         expression: { $: `this.IDCHAMADO = '${idChamado}'` },
       },
