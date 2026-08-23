@@ -7,7 +7,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 async function seed() {
   const client = await pool.connect()
   try {
-    const domain = process.env.ALLOWED_DOMAIN || 'eduzz.com'
+    const domain = (process.env.ALLOWED_DOMAIN || 'eduzz.com').split(',')[0].trim()
     const adminEmail = `admin@${domain}`
     const senhaHash = await bcrypt.hash('eduzz@2026', 12)
 
