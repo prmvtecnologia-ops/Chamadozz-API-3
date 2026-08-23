@@ -220,38 +220,29 @@ function buildMetaCampos(tipo, meta) {
 module.exports = { criarChamado, atualizarStatus, buscarNuseq }// ── Criar registro na AD_CHAMADO ──────────────────────────────────────────────
 async function criarChamado(chamado) {
   const meta = chamado.metadados || {}
-  const hoje = fmtDate()
 
-  const fields = [
-    { name: 'IDCHAMADO',    $: String(chamado.id || '').substring(0,29) },
-    { name: 'TIPO',         $: String(chamado.tipo || '').substring(0,29) },
-    { name: 'TITULO',       $: String(chamado.titulo || '').substring(0,98) },
-    { name: 'STATUS',       $: String(chamado.status || 'aguardando') },
-    { name: 'VALOR',        $: String(Number(chamado.valor || 0).toFixed(2)) },
-    { name: 'SOLICITANTE',  $: String(chamado.solicitante || '').substring(0,98) },
-    { name: 'EMAILSOLICIT', $: String(chamado.email || '').substring(0,98) },
-    { name: 'AUTOREMAIL',   $: String(chamado.autor_email || '').substring(0,98) },
-    { name: 'AUTORNOME',    $: String(chamado.autor_nome || '').substring(0,98) },
-    { name: 'APROVADOR',    $: String(chamado.aprovador || '').substring(0,98) },
-    { name: 'CENTROCUSTO',  $: String(chamado.centro_custo || '').substring(0,98) },
-    { name: 'OBS',          $: String(chamado.obs || '').substring(0,998) },
-    { name: 'DTABERTURA',   $: hoje },
-    { name: 'DTATUALIZACAO',$: hoje },
-    { name: 'SYNKOK',       $: 'S' },
-    ...buildMetaCampos(chamado.tipo, meta),
-  ].filter(f => f.$ !== '')
+  const p = (v, max=98) => String(v || '').substring(0, max).replace(/'/g, "''")
 
-  console.log('[Sankhya] criarChamado campos:', fields.map(f => f.name).join(', '))
+  const sql = `BEGIN PRC_INSERT_AD_CHAMADO(
+    '${p(chamado.id, 29)}',
+    '${p(chamado.tipo, 29)}',
+    '${p(chamado.titulo)}',
+    '${p(chamado.status || 'aguardando', 19)}',
+    ${Number(chamado.valor || 0)},
+    '${p(chamado.solicitante)}',
+    '${p(chamado.email)}',
+    '${p(chamado.autor_email)}',
+    '${p(chamado.autor_nome)}',
+    '${p(chamado.aprovador)}',
+    '${p(chamado.centro_custo)}',
+    '${p(chamado.obs, 998)}'
+  ); END;`
 
-  // Monta como objeto chave:valor (formato alternativo do saveRecord)
-  const fieldObj = {}
-  fields.forEach(f => { fieldObj[f.name] = { $: f.$ } })
+  console.log('[Sankhya] Chamando PRC_INSERT_AD_CHAMADO para', chamado.id)
 
-  return sankhyaRequest('CRUDServiceProvider.saveRecord', {
-    dataSet: {
-      rootEntity: 'AD_CHAMADO',
-      includePresentationFields: 'N',
-      dataRow: { localFields: fieldObj },
-    },
+  return sankhyaRequest('SnkExecProcSP.executeProc', {
+    procedure: { $: sql }
   })
 }
+
+
