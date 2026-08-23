@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="iso-8859-1" ?>
+<metadados xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:noNamespaceSchemaLocation="../.gradle/metadados.xsd">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TABELA: EDZ_CHAMADO — Central de Chamados Eduzz
+       Prefixo EDZ_ para evitar conflito com AD_ reservado pelo Sankhya
+  ═══════════════════════════════════════════════════════════ -->
+
+  <table name="EDZ_CHAMADO" label="Central de Chamados" dbMetadata="Y">
+
+    <!-- Chave primária -->
+    <column name="ID"              label="ID do Chamado"          type="VARCHAR"  size="30"   primaryKey="true"  required="true" />
+
+    <!-- Identificação -->
+    <column name="TIPO"            label="Tipo"                   type="VARCHAR"  size="30"   required="true" />
+    <column name="TITULO"          label="Título"                 type="VARCHAR"  size="200"  required="true" />
+    <column name="STATUS"          label="Status"                 type="VARCHAR"  size="20"   required="true" defaultValue="aguardando" />
+
+    <!-- Valor -->
+    <column name="VALOR"           label="Valor (R$)"             type="DECIMAL"  size="12"   scale="2" required="true" />
+
+    <!-- Solicitante -->
+    <column name="SOLICITANTE"     label="Solicitante"            type="VARCHAR"  size="100"  required="true" />
+    <column name="EMAIL_SOLICIT"   label="E-mail Solicitante"     type="VARCHAR"  size="150"  required="true" />
+    <column name="AUTOR_EMAIL"     label="Aberto por (e-mail)"    type="VARCHAR"  size="150"  required="true" />
+    <column name="AUTOR_NOME"      label="Aberto por (nome)"      type="VARCHAR"  size="100"  required="true" />
+
+    <!-- Aprovação -->
+    <column name="APROVADOR"       label="Aprovador"              type="VARCHAR"  size="100"  required="false" />
+    <column name="CENTRO_CUSTO"    label="Centro de Custo"        type="VARCHAR"  size="100"  required="false" />
+    <column name="OBS"             label="Observações"            type="VARCHAR"  size="2000" required="false" />
+
+    <!-- Datas -->
+    <column name="DT_ABERTURA"     label="Data de Abertura"       type="DATE"     required="true" />
+    <column name="DT_ATUALIZACAO"  label="Última Atualização"     type="DATE"     required="false" />
+
+    <!-- Metadados: Viagem -->
+    <column name="VG_ORIGEM"       label="Viagem: Origem"         type="VARCHAR"  size="100"  required="false" />
+    <column name="VG_DESTINO"      label="Viagem: Destino"        type="VARCHAR"  size="100"  required="false" />
+    <column name="VG_DATA_IDA"     label="Viagem: Data Ida"       type="DATE"     required="false" />
+    <column name="VG_DATA_VOLTA"   label="Viagem: Data Volta"     type="DATE"     required="false" />
+    <column name="VG_MODAL"        label="Viagem: Modal"          type="VARCHAR"  size="30"   required="false" />
+    <column name="VG_HOTEL"        label="Viagem: Hotel/Rede"     type="VARCHAR"  size="100"  required="false" />
+    <column name="VG_CHECKIN"      label="Viagem: Check-in"       type="DATE"     required="false" />
+    <column name="VG_CHECKOUT"     label="Viagem: Check-out"      type="DATE"     required="false" />
+
+    <!-- Metadados: Reembolso -->
+    <column name="RB_PERIODO"      label="Reemb.: Período"        type="VARCHAR"  size="50"   required="false" />
+    <column name="RB_TITULAR"      label="Reemb.: Titular"        type="VARCHAR"  size="100"  required="false" />
+    <column name="RB_CPF"          label="Reemb.: CPF"            type="VARCHAR"  size="20"   required="false" />
+    <column name="RB_BANCO"        label="Reemb.: Banco"          type="VARCHAR"  size="80"   required="false" />
+    <column name="RB_AGENCIA"      label="Reemb.: Agência"        type="VARCHAR"  size="20"   required="false" />
+    <column name="RB_CONTA"        label="Reemb.: Conta"          type="VARCHAR"  size="30"   required="false" />
+    <column name="RB_PIX"          label="Reemb.: PIX"            type="VARCHAR"  size="150"  required="false" />
+
+    <!-- Metadados: Pagamento -->
+    <column name="PG_FORNECEDOR"   label="Pag.: Fornecedor"       type="VARCHAR"  size="150"  required="false" />
+    <column name="PG_CNPJ"         label="Pag.: CNPJ"             type="VARCHAR"  size="20"   required="false" />
+    <column name="PG_VENCIMENTO"   label="Pag.: Vencimento"       type="DATE"     required="false" />
+    <column name="PG_FORMA"        label="Pag.: Forma Pagamento"  type="VARCHAR"  size="50"   required="false" />
+
+    <!-- Metadados: Linha Telefônica -->
+    <column name="LT_TIPO"         label="Linha: Tipo"            type="VARCHAR"  size="50"   required="false" />
+    <column name="LT_OPERADORA"    label="Linha: Operadora"       type="VARCHAR"  size="50"   required="false" />
+    <column name="LT_USUARIO"      label="Linha: Usuário"         type="VARCHAR"  size="100"  required="false" />
+
+    <!-- Metadados: Contrato -->
+    <column name="CT_CONTRAPARTE"  label="Contrato: Contraparte"  type="VARCHAR"  size="150"  required="false" />
+    <column name="CT_TIPO"         label="Contrato: Tipo"         type="VARCHAR"  size="80"   required="false" />
+    <column name="CT_URGENCIA"     label="Contrato: Urgência"     type="VARCHAR"  size="20"   required="false" />
+    <column name="CT_LINK_DOC"     label="Contrato: Link Doc."    type="VARCHAR"  size="500"  required="false" />
+
+    <!-- Controle de sync -->
+    <column name="SYNC_OK"         label="Sincronizado"           type="VARCHAR"  size="1"    required="true"  defaultValue="S" />
+
+  </table>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       FORMULÁRIO DINÂMICO — tela de visualização no Sankhya
+  ═══════════════════════════════════════════════════════════ -->
+
+  <dynamicForm name="EDZ_CHAMADO" entity="EDZ_CHAMADO" label="Central de Chamados">
+
+    <!-- Cabeçalho -->
+    <field column="ID"             label="ID"                     readOnly="true" />
+    <field column="TIPO"           label="Tipo" />
+    <field column="STATUS"         label="Status" />
+    <field column="TITULO"         label="Título"                 colspan="2" />
+    <field column="VALOR"          label="Valor (R$)" />
+    <field column="DT_ABERTURA"    label="Data de Abertura" />
+    <field column="DT_ATUALIZACAO" label="Última Atualização"     readOnly="true" />
+
+    <!-- Solicitante -->
+    <field column="SOLICITANTE"    label="Solicitante" />
+    <field column="EMAIL_SOLICIT"  label="E-mail Solicitante" />
+    <field column="AUTOR_NOME"     label="Aberto por" />
+    <field column="AUTOR_EMAIL"    label="E-mail (aberto por)" />
+    <field column="APROVADOR"      label="Aprovador" />
+    <field column="CENTRO_CUSTO"   label="Centro de Custo" />
+    <field column="OBS"            label="Observações"            colspan="2" />
+
+    <!-- Viagem -->
+    <field column="VG_ORIGEM"      label="Origem" />
+    <field column="VG_DESTINO"     label="Destino" />
+    <field column="VG_DATA_IDA"    label="Data Ida" />
+    <field column="VG_DATA_VOLTA"  label="Data Volta" />
+    <field column="VG_MODAL"       label="Modal" />
+    <field column="VG_HOTEL"       label="Hotel/Rede" />
+    <field column="VG_CHECKIN"     label="Check-in" />
+    <field column="VG_CHECKOUT"    label="Check-out" />
+
+    <!-- Reembolso -->
+    <field column="RB_PERIODO"     label="Período" />
+    <field column="RB_TITULAR"     label="Titular" />
+    <field column="RB_CPF"         label="CPF" />
+    <field column="RB_BANCO"       label="Banco" />
+    <field column="RB_AGENCIA"     label="Agência" />
+    <field column="RB_CONTA"       label="Conta" />
+    <field column="RB_PIX"         label="PIX" />
+
+    <!-- Pagamento -->
+    <field column="PG_FORNECEDOR"  label="Fornecedor" />
+    <field column="PG_CNPJ"        label="CNPJ" />
+    <field column="PG_VENCIMENTO"  label="Vencimento" />
+    <field column="PG_FORMA"       label="Forma de Pagamento" />
+
+    <!-- Linha Telefônica -->
+    <field column="LT_TIPO"        label="Tipo Linha" />
+    <field column="LT_OPERADORA"   label="Operadora" />
+    <field column="LT_USUARIO"     label="Usuário da Linha" />
+
+    <!-- Contrato -->
+    <field column="CT_CONTRAPARTE" label="Contraparte" />
+    <field column="CT_TIPO"        label="Tipo Contrato" />
+    <field column="CT_URGENCIA"    label="Urgência" />
+    <field column="CT_LINK_DOC"    label="Link Documento"         colspan="2" />
+
+  </dynamicForm>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MENU — entrada no sistema
+  ═══════════════════════════════════════════════════════════ -->
+
+  <menu name="EDZ_MENU_CHAMADOS"
+        label="Central de Chamados"
+        icon="fa fa-ticket"
+        module="Gestão">
+    <menuItem name="EDZ_CHAMADO_ITEM"
+              label="Chamados"
+              form="EDZ_CHAMADO" />
+  </menu>
+
+</metadados>
