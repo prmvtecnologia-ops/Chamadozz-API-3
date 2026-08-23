@@ -78,16 +78,16 @@ async function criarChamado(chamado) {
   const fields = [
     { name: 'IDCHAMADO',    $: String(chamado.id || '') },
     { name: 'TIPO',         $: String(chamado.tipo || '') },
-    { name: 'TITULO',       $: String(chamado.titulo || '') },
+    { name: 'TITULO',       $: String(chamado.titulo || '').substring(0, 198) },
     { name: 'STATUS',       $: String(chamado.status || 'aguardando') },
-    { name: 'VALOR',        $: String(chamado.valor || 0) },
-    { name: 'SOLICITANTE',  $: String(chamado.solicitante || '') },
-    { name: 'EMAILSOLICIT', $: String(chamado.email || '') },
-    { name: 'AUTOREMAIL',   $: String(chamado.autor_email || '') },
-    { name: 'AUTORNOME',    $: String(chamado.autor_nome || '') },
-    { name: 'APROVADOR',    $: String(chamado.aprovador    || '') },
-    { name: 'CENTROCUSTO',  $: String(chamado.centro_custo || '') },
-    { name: 'OBS',          $: String(chamado.obs          || '') },
+    { name: 'VALOR',        $: Number(chamado.valor || 0) },
+    { name: 'SOLICITANTE',  $: String(chamado.solicitante || '').substring(0, 98) },
+    { name: 'EMAILSOLICIT', $: String(chamado.email || '').substring(0, 148) },
+    { name: 'AUTOREMAIL',   $: String(chamado.autor_email || '').substring(0, 148) },
+    { name: 'AUTORNOME',    $: String(chamado.autor_nome || '').substring(0, 98) },
+    { name: 'APROVADOR',    $: String(chamado.aprovador    || '').substring(0, 98) },
+    { name: 'CENTROCUSTO',  $: String(chamado.centro_custo || '').substring(0, 98) },
+    { name: 'OBS',          $: String(chamado.obs          || '').substring(0, 1998) },
     { name: 'DTABERTURA',   $: hoje },
     { name: 'DTATUALIZACAO',$: hoje },
     { name: 'SYNKOK',       $: 'S' },
@@ -96,12 +96,15 @@ async function criarChamado(chamado) {
 
   console.log('[Sankhya] criarChamado campos:', fields.map(f => f.name).join(', '))
 
+  // Remove campos de metadados que estão vazios para não causar erro no Sankhya
+  const filteredFields = fields.filter(f => f.$ !== '' || ['IDCHAMADO','TIPO','TITULO','STATUS','VALOR','SOLICITANTE','EMAILSOLICIT','AUTOREMAIL','AUTORNOME','DTABERTURA','DTATUALIZACAO','SYNKOK'].includes(f.name))
+
   return sankhyaRequest('CRUDServiceProvider.saveRecord', {
     dataSet: {
       rootEntity: 'AD_CHAMADO',
       includePresentationFields: 'N',
       dataRow: {
-        localFields: { field: fields },
+        localFields: { field: filteredFields },
       },
     },
   })
