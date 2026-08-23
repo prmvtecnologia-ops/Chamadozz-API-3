@@ -114,17 +114,28 @@ async function criarChamado(chamado) {
     ...buildMetaCampos(chamado.tipo, meta),
   ]
 
-  const filteredFields = fields.filter(f => f.$ !== '')
+  const filteredFields = fields.filter(f => f.$ !== '' && f.name !== 'NUSEQ')
 
   console.log('[Sankhya] criarChamado campos:', filteredFields.map(f => f.name).join(', '))
+
+  // Monta objeto de campos para o CRUD
+  const fieldObj = {}
+  filteredFields.forEach(f => { fieldObj[f.name] = { $: f.$ } })
 
   return sankhyaRequest('CRUDServiceProvider.saveRecord', {
     dataSet: {
       rootEntity: 'AD_CHAMADO',
       includePresentationFields: 'N',
       dataRow: {
-        localFields: { field: filteredFields },
+        localFields: {
+          field: filteredFields
+        },
       },
+      entity: {
+        fieldset: {
+          list: filteredFields.map(f => f.name).join(',')
+        }
+      }
     },
   })
 }
