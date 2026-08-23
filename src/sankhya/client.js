@@ -217,4 +217,49 @@ function buildMetaCampos(tipo, meta) {
   }
 }
 
-module.exports = { criarChamado, atualizarStatus, buscarNuseq }
+module.exports = { criarChamado, atualizarStatus, buscarNuseq }// ── Criar registro na AD_CHAMADO ──────────────────────────────────────────────
+async function criarChamado(chamado) {
+  const meta = chamado.metadados || {}
+  const hoje = fmtDate()
+
+  const campos = {
+    IDCHAMADO:    String(chamado.id || '').substring(0, 29),
+    TIPO:         String(chamado.tipo || '').substring(0, 29),
+    TITULO:       String(chamado.titulo || '').substring(0, 98).replace(/'/g, "''"),
+    STATUS:       String(chamado.status || 'aguardando').substring(0, 19),
+    VALOR:        Number(chamado.valor || 0),
+    SOLICITANTE:  String(chamado.solicitante || '').substring(0, 98).replace(/'/g, "''"),
+    EMAILSOLICIT: String(chamado.email || '').substring(0, 98),
+    AUTOREMAIL:   String(chamado.autor_email || '').substring(0, 98),
+    AUTORNOME:    String(chamado.autor_nome || '').substring(0, 98).replace(/'/g, "''"),
+    APROVADOR:    String(chamado.aprovador || '').substring(0, 98).replace(/'/g, "''"),
+    CENTROCUSTO:  String(chamado.centro_custo || '').substring(0, 98),
+    OBS:          String(chamado.obs || '').substring(0, 998).replace(/'/g, "''"),
+    DTABERTURA:   `TO_DATE('${hoje}','DD/MM/YYYY')`,
+    DTATUALIZACAO:`TO_DATE('${hoje}','DD/MM/YYYY')`,
+    SYNKOK:       'S',
+  }
+
+  // Adiciona metadados por tipo
+  const meta_campos = buildMetaCampos(chamado.tipo, meta)
+  meta_campos.forEach(f => {
+    if (f.$ && f.$ !== '') campos[f.name] = String(f.$).substring(0, 98).replace(/'/g, "''")
+  })
+
+  const colNames = Object.keys(campos).join(', ')
+  const colVals  = Object.entries(campos).map(([k, v]) => {
+    if (k === 'DTABERTURA' || k === 'DTATUALIZACAO') return v
+    if (k === 'VALOR') return v
+    return `'${v}'`
+  }).join(', ')
+
+  const sql = `INSERT INTO AD_CHAMADO (NUSEQ, ${colNames}) VALUES (GEN_AD_CHAMADO.NEXTVAL, ${colVals})`
+
+  console.log('[Sankhya] SQL:', sql.substring(0, 300))
+
+  return sankhyaRequest('DbExplorerSP.executeQuery', {
+    sql: { $: sql }
+  })
+}
+
+
