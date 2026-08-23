@@ -219,17 +219,35 @@ function buildMetaCampos(tipo, meta) {
 
 module.exports = { criarChamado, atualizarStatus, buscarNuseq }// ── Criar registro na AD_CHAMADO ──────────────────────────────────────────────
 async function criarChamado(chamado) {
-  const p = (v, max=98) => String(v || '').substring(0, max).replace(/'/g, "''")
-  const n = (v) => Number(v || 0)
+  const p = (v, max=98) => String(v || '').substring(0, max)
+  const hoje = fmtDate()
 
-  // Chama a procedure via bloco PL/SQL anônimo
-  const sql = `CALL PRC_INSERT_AD_CHAMADO('${p(chamado.id,29)}','${p(chamado.tipo,29)}','${p(chamado.titulo)}','${p(chamado.status||'aguardando',19)}',${n(chamado.valor)},'${p(chamado.solicitante)}','${p(chamado.email)}','${p(chamado.autor_email)}','${p(chamado.autor_nome)}','${p(chamado.aprovador)}','${p(chamado.centro_custo)}','${p(chamado.obs,998)}')`
+  console.log('[Sankhya] Tentando saveRecord para', chamado.id)
 
-  console.log('[Sankhya] Chamando procedure para', chamado.id)
-
-  return sankhyaRequest('DbExplorerSP.executeQuery', {
-    sql: { $: sql },
-    parameters: { $: '' }
+  // Formato correto do saveRecord Sankhya on-premise
+  return sankhyaRequest('CRUDServiceProvider.saveRecord', {
+    dataSet: {
+      rootEntity: 'AD_CHAMADO',
+      includePresentationFields: 'N',
+      dataRow: {
+        localFields: {
+          IDCHAMADO:    { $: p(chamado.id, 29) },
+          TIPO:         { $: p(chamado.tipo, 29) },
+          TITULO:       { $: p(chamado.titulo) },
+          STATUS:       { $: p(chamado.status || 'aguardando', 19) },
+          VALOR:        { $: String(Number(chamado.valor || 0)) },
+          SOLICITANTE:  { $: p(chamado.solicitante) },
+          EMAILSOLICIT: { $: p(chamado.email) },
+          AUTOREMAIL:   { $: p(chamado.autor_email) },
+          AUTORNOME:    { $: p(chamado.autor_nome) },
+          APROVADOR:    { $: p(chamado.aprovador) },
+          CENTROCUSTO:  { $: p(chamado.centro_custo) },
+          OBS:          { $: p(chamado.obs, 998) },
+          DTABERTURA:   { $: hoje },
+          SYNKOK:       { $: 'S' },
+        }
+      }
+    }
   })
 }
 
