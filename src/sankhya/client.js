@@ -74,7 +74,6 @@ async function sankhyaRequest(serviceName, requestBody) {
   }
 
   const text = await res.text()
-  // ← log completo para diagnóstico
   console.log(`[Sankhya] Resposta ${serviceName} (${res.status}):`, text)
 
   let data
@@ -137,18 +136,19 @@ async function criarChamado(chamado) {
   console.log('[Sankhya] Tentando saveRecord para', chamado.id)
 
   const localFields = {
-    IDCHAMADO:    { $: p(chamado.id, 29) },
-    TIPO:         { $: p(chamado.tipo, 29) },
-    TITULO:       { $: p(chamado.titulo) },
-    STATUS:       { $: p(chamado.status || 'aguardando', 19) },
-    VALOR:        { $: String(Number(chamado.valor || 0)) },
-    SOLICITANTE:  { $: p(chamado.solicitante) },
-    EMAILSOLICIT: { $: p(chamado.email) },
-    AUTOREMAIL:   { $: p(chamado.autor_email) },
-    AUTORNOME:    { $: p(chamado.autor_nome) },
-    APROVADOR:    { $: p(chamado.aprovador) },
-    CENTROCUSTO:  { $: p(chamado.centro_custo) },
-    OBS:          { $: p(chamado.obs, 998) },
+    NUSEQ:        { $: '0' },                              // 0 = insert novo
+    IDCHAMADO:    { $: p(chamado.id, 98) },
+    TIPO:         { $: p(chamado.tipo, 98) },
+    TITULO:       { $: p(chamado.titulo, 98) },
+    STATUS:       { $: p(chamado.status || 'aguardando', 98) },
+    VALOR:        { $: Number(chamado.valor || 0) },       // ← FLOAT: número, não string
+    SOLICITANTE:  { $: p(chamado.solicitante, 98) },
+    EMAILSOLICIT: { $: p(chamado.email, 98) },
+    AUTOREMAIL:   { $: p(chamado.autor_email, 98) },
+    AUTORNOME:    { $: p(chamado.autor_nome, 98) },
+    APROVADOR:    { $: p(chamado.aprovador, 98) },
+    CENTROCUSTO:  { $: p(chamado.centro_custo, 98) },
+    OBS:          { $: p(chamado.obs, 98) },
     DTABERTURA:   { $: hoje },
     SYNKOK:       { $: 'S' },
     ...buildMetaCampos(chamado.tipo, meta),
@@ -175,7 +175,7 @@ async function atualizarStatus(nuseq, id, status) {
       includePresentationFields: 'N',
       dataRow: {
         localFields: {
-          NUSEQ:         { $: String(nuseq) },
+          NUSEQ:         { $: Number(nuseq) },             // ← NUMBER: número, não string
           STATUS:        { $: String(status) },
           DTATUALIZACAO: { $: fmtDate() },
         },
