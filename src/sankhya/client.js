@@ -10,7 +10,6 @@ const PASSWORD = process.env.SANKHYA_PASS
 
 let cachedJWT    = null
 let jwtExpiresAt = 0
-const CACHE_JWT  = false // desabilitado para debug
 
 function fmtDate() {
   const d = new Date()
@@ -18,7 +17,7 @@ function fmtDate() {
 }
 
 async function getJWT() {
-  if (CACHE_JWT && cachedJWT && Date.now() < jwtExpiresAt) return cachedJWT
+  if (cachedJWT && Date.now() < jwtExpiresAt) return cachedJWT
 
   const res = await fetch(`${BASE_URL}/mge/service.sbr?serviceName=MobileLoginSP.login&outputType=json`, {
     method: 'POST',
@@ -46,7 +45,7 @@ async function getJWT() {
 
   cachedJWT    = jwt
   jwtExpiresAt = Date.now() + 25 * 60 * 1000
-  console.log('[Sankhya] Login OK, JWT obtido:', jwt.substring(0, 20) + '...')
+  console.log('[Sankhya] Login OK, JWT obtido')
   return jwt
 }
 
@@ -86,142 +85,125 @@ async function sankhyaRequest(serviceName, requestBody) {
   throw new Error(`Sankhya [${serviceName}] erro: ${errMsg}`)
 }
 
-async function getNextNuseq() {
-  const data = await sankhyaRequest('DbExplorerSP.executeQuery', {
-    sql: 'SELECT GEN_AD_CHAMADO.NEXTVAL FROM DUAL',
-  })
-
-  const rows = data?.responseBody?.rows
-  if (rows && rows.length && rows[0].length) {
-    const val = rows[0][0]
-    console.log('[Sankhya] NUSEQ obtido (rows):', val)
-    return Number(val)
-  }
-
-  const entities = data?.responseBody?.entities?.entity
-  if (entities) {
-    const row = Array.isArray(entities) ? entities[0] : entities
-    const val = row?.f0?.$
-    console.log('[Sankhya] NUSEQ obtido (entities):', val)
-    return Number(val)
-  }
-
-  throw new Error('Sankhya: não foi possível obter NUSEQ da sequence')
+function esc(v, max = 98) {
+  return String(v || '').replace(/'/g, "''").substring(0, max)
 }
 
-function buildMetaCampos(tipo, meta) {
-  const p = (v, max = 98) => String(v || '').substring(0, max)
+function buildMetaParams(tipo, meta) {
+  const e = (v) => esc(v)
   switch (tipo) {
-    case 'Viagem': return {
-      VGORIGEM:  { $: p(meta.origem) },
-      VGDESTINO: { $: p(meta.destino) },
-      VGMODAL:   { $: p(meta.modal) },
-      VGHOTEL:   { $: p(meta.hotel_rede) },
-    }
-    case 'Reembolso': return {
-      RBPERIODO:  { $: p(meta.periodo) },
-      RBTITULAR:  { $: p(meta.titular) },
-      RBCPF:      { $: p(meta.cpf) },
-      RBBANCO:    { $: p(meta.banco) },
-      RBAGENCIA:  { $: p(meta.agencia) },
-      RBCONTA:    { $: p(meta.conta) },
-      RBPIX:      { $: p(meta.pix) },
-    }
-    case 'Pagamento': return {
-      PGFORNECEDOR: { $: p(meta.fornecedor) },
-      PGCNPJ:       { $: p(meta.cnpj) },
-      PGFORMA:      { $: p(meta.forma_pagamento) },
-    }
-    case 'LinhaTeléfonica': return {
-      LTTIPO:      { $: p(meta.tipo_linha) },
-      LTOPERADORA: { $: p(meta.operadora) },
-      LTUSUARIO:   { $: p(meta.usuario_linha) },
-    }
-    case 'Contrato': return {
-      CTCONTRAPARTE: { $: p(meta.contraparte) },
-      CTTIPO:        { $: p(meta.tipo_contrato) },
-      CTURGENCIA:    { $: p(meta.urgencia) },
-      CTLINKDOC:     { $: p(meta.link_doc) },
-    }
-    default: return {}
+    case 'Viagem': return `
+      UPDATE AD_CHAMADO SET
+        VGORIGEM  = '${e(meta.origem)}',
+        VGDESTINO = '${e(meta.destino)}',
+        VGMODAL   = '${e(meta.modal)}',
+        VGHOTEL   = '${e(meta.hotel_rede)}'
+      WHERE IDCHAMADO = '`
+    case 'Reembolso': return `
+      UPDATE AD_CHAMADO SET
+        RBPERIODO = '${e(meta.periodo)}',
+        RBTITULAR = '${e(meta.titular)}',
+        RBCPF     = '${e(meta.cpf)}',
+        RBBANCO   = '${e(meta.banco)}',
+        RBAGENCIA = '${e(meta.agencia)}',
+        RBCONTA   = '${e(meta.conta)}',
+        RBPIX     = '${e(meta.pix)}'
+      WHERE IDCHAMADO = '`
+    case 'Pagamento': return `
+      UPDATE AD_CHAMADO SET
+        PGFORNECEDOR = '${e(meta.fornecedor)}',
+        PGCNPJ       = '${e(meta.cnpj)}',
+        PGFORMA      = '${e(meta.forma_pagamento)}'
+      WHERE IDCHAMADO = '`
+    case 'LinhaTeléfonica': return `
+      UPDATE AD_CHAMADO SET
+        LTTIPO      = '${e(meta.tipo_linha)}',
+        LTOPERADORA = '${e(meta.operadora)}',
+        LTUSUARIO   = '${e(meta.usuario_linha)}'
+      WHERE IDCHAMADO = '`
+    case 'Contrato': return `
+      UPDATE AD_CHAMADO SET
+        CTCONTRAPARTE = '${e(meta.contraparte)}',
+        CTTIPO        = '${e(meta.tipo_contrato)}',
+        CTURGENCIA    = '${e(meta.urgencia)}',
+        CTLINKDOC     = '${e(meta.link_doc)}'
+      WHERE IDCHAMADO = '`
+    default: return null
   }
 }
 
 async function criarChamado(chamado) {
-  const p = (v, max = 98) => String(v || '').substring(0, max)
   const hoje = fmtDate()
   const meta = chamado.metadados || {}
 
-  console.log('[Sankhya] Tentando saveRecord para', chamado.id)
+  console.log('[Sankhya] Tentando INSERT via procedure para', chamado.id)
 
-  const nuseq = await getNextNuseq()
-  console.log('[Sankhya] NUSEQ para insert:', nuseq)
+  const sql = `
+    BEGIN
+      PRC_INSERT_AD_CHAMADO(
+        '${esc(chamado.id)}',
+        '${esc(chamado.tipo)}',
+        '${esc(chamado.titulo)}',
+        '${esc(chamado.status || 'aguardando')}',
+        ${Number(chamado.valor || 0)},
+        '${esc(chamado.solicitante)}',
+        '${esc(chamado.email)}',
+        '${esc(chamado.autor_email)}',
+        '${esc(chamado.autor_nome)}',
+        '${esc(chamado.aprovador)}',
+        '${esc(chamado.centro_custo)}',
+        '${esc(chamado.obs)}',
+        TO_DATE('${hoje}', 'DD/MM/YYYY'),
+        'S'
+      );
+    END;
+  `
 
-  const localFields = {
-    NUSEQ:        { $: nuseq },
-    IDCHAMADO:    { $: p(chamado.id, 98) },
-    TIPO:         { $: p(chamado.tipo, 98) },
-    TITULO:       { $: p(chamado.titulo, 98) },
-    STATUS:       { $: p(chamado.status || 'aguardando', 98) },
-    VALOR:        { $: Number(chamado.valor || 0) },
-    SOLICITANTE:  { $: p(chamado.solicitante, 98) },
-    EMAILSOLICIT: { $: p(chamado.email, 98) },
-    AUTOREMAIL:   { $: p(chamado.autor_email, 98) },
-    AUTORNOME:    { $: p(chamado.autor_nome, 98) },
-    APROVADOR:    { $: p(chamado.aprovador, 98) },
-    CENTROCUSTO:  { $: p(chamado.centro_custo, 98) },
-    OBS:          { $: p(chamado.obs, 98) },
-    DTABERTURA:   { $: hoje },
-    SYNKOK:       { $: 'S' },
-    ...buildMetaCampos(chamado.tipo, meta),
+  console.log('[Sankhya] SQL procedure:', sql)
+
+  const result = await sankhyaRequest('DbExplorerSP.executeQuery', { sql })
+
+  // Se tem campos de tipo específico, faz UPDATE
+  const metaSql = buildMetaParams(chamado.tipo, meta)
+  if (metaSql) {
+    const updateSql = `BEGIN ${metaSql}${esc(chamado.id)}'; END;`
+    console.log('[Sankhya] SQL update meta:', updateSql)
+    await sankhyaRequest('DbExplorerSP.executeQuery', { sql: updateSql })
   }
 
-  console.log('[Sankhya] Payload localFields:', JSON.stringify(localFields, null, 2))
-
-  return sankhyaRequest('CRUDServiceProvider.saveRecord', {
-    dataSet: {
-      rootEntity: 'AD_CHAMADO',
-      includePresentationFields: 'N',
-      dataRow: {
-        localFields,
-      },
-    },
-  })
+  return result
 }
 
 async function atualizarStatus(nuseq, id, status) {
-  return sankhyaRequest('CRUDServiceProvider.saveRecord', {
-    dataSet: {
-      rootEntity: 'AD_CHAMADO',
-      includePresentationFields: 'N',
-      dataRow: {
-        localFields: {
-          NUSEQ:         { $: Number(nuseq) },
-          STATUS:        { $: String(status) },
-          DTATUALIZACAO: { $: fmtDate() },
-        },
-      },
-    },
-  })
+  const hoje = fmtDate()
+  const sql = `
+    BEGIN
+      UPDATE AD_CHAMADO
+      SET STATUS = '${esc(status)}',
+          DTATUALIZACAO = TO_DATE('${hoje}', 'DD/MM/YYYY')
+      WHERE NUSEQ = ${Number(nuseq)};
+      COMMIT;
+    END;
+  `
+  console.log('[Sankhya] SQL atualizarStatus:', sql)
+  return sankhyaRequest('DbExplorerSP.executeQuery', { sql })
 }
 
 async function buscarNuseq(idChamado) {
-  const data = await sankhyaRequest('CRUDServiceProvider.loadRecords', {
-    dataSet: {
-      rootEntity: 'AD_CHAMADO',
-      includePresentationFields: 'N',
-      offsetPage: '0',
-      criteria: {
-        expression: { $: `this.IDCHAMADO = '${idChamado.replace(/'/g, "''")}'` },
-      },
-      fieldSet: { list: 'NUSEQ' },
-    },
+  const data = await sankhyaRequest('DbExplorerSP.executeQuery', {
+    sql: `SELECT NUSEQ FROM AD_CHAMADO WHERE IDCHAMADO = '${esc(idChamado)}'`,
   })
 
-  const rows = data?.responseBody?.entities?.entity
-  if (!rows) return null
-  const row = Array.isArray(rows) ? rows[0] : rows
-  return row?.f0?.$ || null
+  const rows = data?.responseBody?.rows
+  if (rows && rows.length && rows[0].length) return Number(rows[0][0])
+
+  const entities = data?.responseBody?.entities?.entity
+  if (entities) {
+    const row = Array.isArray(entities) ? entities[0] : entities
+    return Number(row?.f0?.$) || null
+  }
+
+  return null
 }
 
 module.exports = { criarChamado, atualizarStatus, buscarNuseq }
