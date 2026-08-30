@@ -74,14 +74,15 @@ async function sankhyaRequest(serviceName, requestBody) {
   }
 
   const text = await res.text()
-  console.log(`[Sankhya] Resposta ${serviceName} (${res.status}):`, text.substring(0, 500))
+  // ← log completo para diagnóstico
+  console.log(`[Sankhya] Resposta ${serviceName} (${res.status}):`, text)
 
   let data
   try { data = JSON.parse(text) } catch(e) {
     throw new Error(`Sankhya resposta inválida: ${text.substring(0, 200)}`)
   }
 
-  // ✅ status '0' = sucesso no saveRecord | status '1' = sucesso no loadRecords
+  // status '0' = sucesso no saveRecord | status '1' = sucesso no loadRecords
   if (data?.status === '0' || data?.status === '1' || data?.responseBody) return data
 
   const errMsg = JSON.stringify(data?.statusMessage || data?.error || data)
@@ -152,6 +153,8 @@ async function criarChamado(chamado) {
     SYNKOK:       { $: 'S' },
     ...buildMetaCampos(chamado.tipo, meta),
   }
+
+  console.log('[Sankhya] Payload localFields:', JSON.stringify(localFields, null, 2))
 
   return sankhyaRequest('CRUDServiceProvider.saveRecord', {
     dataSet: {
