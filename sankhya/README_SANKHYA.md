@@ -5,7 +5,7 @@
 1. Acesse o Sankhya → **MGE > Customizações > Metadados**
 2. Clique em **Importar**
 3. Selecione o arquivo `AD_CHAMADO_metadata.xml`
-4. Confirme a importação
+4. Confirme a importação 
 5. Vá em **MGE > Customizações > Telas** e crie a tela apontando para a entidade `AD_CHAMADO`
 
 ## 2. Criar usuário de integração no Sankhya
