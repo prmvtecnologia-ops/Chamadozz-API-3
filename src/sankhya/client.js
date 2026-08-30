@@ -136,6 +136,7 @@ async function criarChamado(chamado) {
   console.log('[Sankhya] Tentando saveRecord para', chamado.id)
 
   const localFields = {
+    NUSEQ:        { $: -1 },
     IDCHAMADO:    { $: p(chamado.id, 98) },
     TIPO:         { $: p(chamado.tipo, 98) },
     TITULO:       { $: p(chamado.titulo, 98) },
