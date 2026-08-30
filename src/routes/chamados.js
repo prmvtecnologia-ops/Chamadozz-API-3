@@ -1,156 +1,233 @@
-const router  = require('express').Router()
-const pool    = require('../db/pool')
-const sankhya = require('../sankhya/client')
-const { requireAuth, requireAdmin } = require('../middleware/auth')
+/**
+ * sankhya/client.js
+ */
 
-const SANKHYA_ON = () => !!(
-  process.env.SANKHYA_APP_KEY &&
-  process.env.SANKHYA_TOKEN   &&
-  process.env.SANKHYA_USER    &&
-  process.env.SANKHYA_PASS
-)
+const BASE_URL = process.env.SANKHYA_BASE_URL || 'http://eduzz.snk.ativy.com:40020'
+const APP_KEY  = process.env.SANKHYA_APP_KEY
+const TOKEN    = process.env.SANKHYA_TOKEN
+const USERNAME = process.env.SANKHYA_USER
+const PASSWORD = process.env.SANKHYA_PASS
 
-function genId() {
-  const d  = new Date()
-  const dt = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`
-  return `CHM-${dt}-${Math.floor(1000 + Math.random() * 8999)}`
+let cachedJWT    = null
+let jwtExpiresAt = 0
+
+function fmtDate() {
+  const d = new Date()
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
 }
 
-// GET /chamados
-router.get('/', requireAuth, async (req, res) => {
-  try {
-    const isAdmin = req.user.role === 'admin'
-    const { rows } = isAdmin
-      ? await pool.query('SELECT * FROM chamados ORDER BY criado_em DESC')
-      : await pool.query('SELECT * FROM chamados WHERE autor_email = $1 ORDER BY criado_em DESC', [req.user.email])
-    res.json(rows)
-  } catch (e) {
-    console.error(e); res.status(500).json({ error: 'Erro interno.' })
-  }
-})
+// ── Autenticação ──────────────────────────────────────────────────
+async function getJWT() {
+  if (cachedJWT && Date.now() < jwtExpiresAt) return cachedJWT
 
-// GET /chamados/:id
-router.get('/:id', requireAuth, async (req, res) => {
-  try {
-    const { rows } = await pool.query('SELECT * FROM chamados WHERE id = $1', [req.params.id])
-    if (!rows.length) return res.status(404).json({ error: 'Não encontrado.' })
-    const c = rows[0]
-    if (req.user.role !== 'admin' && c.autor_email !== req.user.email)
-      return res.status(403).json({ error: 'Acesso negado.' })
-    const { rows: hist } = await pool.query(
-      'SELECT * FROM historico_chamados WHERE chamado_id = $1 ORDER BY criado_em ASC', [req.params.id]
-    )
-    res.json({ ...c, historico: hist })
-  } catch (e) {
-    res.status(500).json({ error: 'Erro interno.' })
-  }
-})
+  const res = await fetch(`${BASE_URL}/mge/service.sbr?serviceName=MobileLoginSP.login&outputType=json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      serviceName: 'MobileLoginSP.login',
+      requestBody: {
+        NOMUSU:        { $: USERNAME },
+        INTERNO:       { $: PASSWORD },
+        KEEPCONNECTED: { $: 'S' },
+      },
+    }),
+  })
 
-// POST /chamados
-router.post('/', requireAuth, async (req, res) => {
-  try {
-    const { tipo, titulo, valor, solicitante, email, aprovador, centro_custo, obs, metadados } = req.body
-    if (!tipo || !titulo || !valor || !solicitante || !email)
-      return res.status(400).json({ error: 'Campos obrigatórios: tipo, titulo, valor, solicitante, email.' })
-
-    const id = genId()
-
-    const { rows } = await pool.query(
-      `INSERT INTO chamados
-         (id, tipo, titulo, valor, solicitante, email, aprovador, centro_custo, obs,
-          metadados, autor_email, autor_nome)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [id, tipo, titulo, Number(valor), solicitante, email,
-       aprovador || null, centro_custo || null, obs || null,
-       JSON.stringify(metadados || {}), req.user.email, req.user.nome]
-    )
-
-    await pool.query(
-      `INSERT INTO historico_chamados (chamado_id, status_para, usuario_email, usuario_nome)
-       VALUES ($1, 'aguardando', $2, $3)`,
-      [id, req.user.email, req.user.nome]
-    )
-
-    const chamado = rows[0]
-
-    // Grava na AD_CHAMADO do Sankhya (assíncrono)
-    if (SANKHYA_ON()) {
-      sankhya.criarChamado({ ...chamado, metadados: metadados || {} })
-        .then(() => {
-          pool.query('UPDATE chamados SET sankhya = true WHERE id = $1', [id])
-          console.log(`[Sankhya] ✓ Chamado ${id} gravado na AD_CHAMADO`)
-        })
-        .catch(err => console.error(`[Sankhya] ✗ Erro ao gravar ${id}:`, err.message))
+  const data = await res.json()
+  let jwt = data?.responseBody?.jsessionid?.$
+  if (!jwt) {
+    const setCookie = res.headers.get('set-cookie')
+    if (setCookie) {
+      const match = setCookie.match(/JSESSIONID=([^;]+)/)
+      if (match) jwt = match[1]
     }
-
-    res.status(201).json(chamado)
-  } catch (e) {
-    console.error(e); res.status(500).json({ error: 'Erro interno.' })
   }
-})
+  if (!jwt) throw new Error('Sankhya: JWT nao encontrado: ' + JSON.stringify(data).substring(0, 300))
 
-// PATCH /chamados/:id/status
-router.patch('/:id/status', requireAuth, requireAdmin, async (req, res) => {
+  cachedJWT    = jwt
+  jwtExpiresAt = Date.now() + 25 * 60 * 1000
+  console.log('[Sankhya] Login OK, JWT obtido')
+  return jwt
+}
+
+// ── Requisição genérica ───────────────────────────────────────────
+async function sankhyaRequest(serviceName, requestBody) {
+  const jwt = await getJWT()
+  console.log(`[Sankhya] Chamando ${serviceName}...`)
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15000)
+
+  let res
   try {
-    const { status } = req.body
-    if (!['aguardando','aprovado','fila','rejeitado'].includes(status))
-      return res.status(400).json({ error: 'Status inválido.' })
+    res = await fetch(`${BASE_URL}/mge/service.sbr?serviceName=${serviceName}&outputType=json`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': `JSESSIONID=${jwt}`,
+      },
+      body: JSON.stringify({ serviceName, requestBody }),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
 
-    const { rows: cur } = await pool.query('SELECT * FROM chamados WHERE id = $1', [req.params.id])
-    if (!cur.length) return res.status(404).json({ error: 'Não encontrado.' })
+  const text = await res.text()
+  console.log(`[Sankhya] Resposta ${serviceName} (${res.status}):`, text)
 
-    const { rows } = await pool.query(
-      'UPDATE chamados SET status = $1, atualizado_em = NOW() WHERE id = $2 RETURNING *',
-      [status, req.params.id]
-    )
+  let data
+  try { data = JSON.parse(text) } catch(e) {
+    throw new Error(`Sankhya resposta inválida: ${text.substring(0, 200)}`)
+  }
 
-    await pool.query(
-      `INSERT INTO historico_chamados (chamado_id, status_de, status_para, usuario_email, usuario_nome)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [req.params.id, cur[0].status, status, req.user.email, req.user.nome]
-    )
+  if (data?.status === '0' || data?.status === '1' || data?.responseBody) return data
 
-    // Atualiza status na AD_CHAMADO (assíncrono)
-    if (SANKHYA_ON()) {
-      sankhya.buscarNuseq(req.params.id)
-        .then(nuseq => {
-          if (nuseq) return sankhya.atualizarStatus(nuseq, req.params.id, status)
-          console.warn(`[Sankhya] NUSEQ não encontrado para ${req.params.id}`)
-        })
-        .then(() => console.log(`[Sankhya] ✓ Status ${req.params.id} → ${status}`))
-        .catch(err => console.error(`[Sankhya] ✗ Erro ao atualizar status:`, err.message))
+  const errMsg = JSON.stringify(data?.statusMessage || data?.error || data)
+  throw new Error(`Sankhya [${serviceName}] erro: ${errMsg}`)
+}
+
+// ── Buscar próximo NUSEQ via sequence ─────────────────────────────
+async function getNextNuseq() {
+  const data = await sankhyaRequest('DbExplorerSP.executeQuery', {
+    sql: 'SELECT GEN_AD_CHAMADO.NEXTVAL FROM DUAL',
+  })
+
+  // Tenta extrair o valor da resposta
+  const rows = data?.responseBody?.rows
+  if (rows && rows.length && rows[0].length) {
+    const val = rows[0][0]
+    console.log('[Sankhya] Próximo NUSEQ:', val)
+    return Number(val)
+  }
+
+  // Fallback: tenta outros formatos de resposta
+  const entities = data?.responseBody?.entities?.entity
+  if (entities) {
+    const row = Array.isArray(entities) ? entities[0] : entities
+    const val = row?.f0?.$
+    console.log('[Sankhya] Próximo NUSEQ (entities):', val)
+    return Number(val)
+  }
+
+  throw new Error('Sankhya: não foi possível obter NUSEQ da sequence')
+}
+
+// ── Campos extras por tipo ────────────────────────────────────────
+function buildMetaCampos(tipo, meta) {
+  const p = (v, max = 98) => String(v || '').substring(0, max)
+  switch (tipo) {
+    case 'Viagem': return {
+      VGORIGEM:  { $: p(meta.origem) },
+      VGDESTINO: { $: p(meta.destino) },
+      VGMODAL:   { $: p(meta.modal) },
+      VGHOTEL:   { $: p(meta.hotel_rede) },
     }
-
-    res.json(rows[0])
-  } catch (e) {
-    console.error(e); res.status(500).json({ error: 'Erro interno.' })
+    case 'Reembolso': return {
+      RBPERIODO:  { $: p(meta.periodo) },
+      RBTITULAR:  { $: p(meta.titular) },
+      RBCPF:      { $: p(meta.cpf) },
+      RBBANCO:    { $: p(meta.banco) },
+      RBAGENCIA:  { $: p(meta.agencia) },
+      RBCONTA:    { $: p(meta.conta) },
+      RBPIX:      { $: p(meta.pix) },
+    }
+    case 'Pagamento': return {
+      PGFORNECEDOR: { $: p(meta.fornecedor) },
+      PGCNPJ:       { $: p(meta.cnpj) },
+      PGFORMA:      { $: p(meta.forma_pagamento) },
+    }
+    case 'LinhaTeléfonica': return {
+      LTTIPO:      { $: p(meta.tipo_linha) },
+      LTOPERADORA: { $: p(meta.operadora) },
+      LTUSUARIO:   { $: p(meta.usuario_linha) },
+    }
+    case 'Contrato': return {
+      CTCONTRAPARTE: { $: p(meta.contraparte) },
+      CTTIPO:        { $: p(meta.tipo_contrato) },
+      CTURGENCIA:    { $: p(meta.urgencia) },
+      CTLINKDOC:     { $: p(meta.link_doc) },
+    }
+    default: return {}
   }
-})
+}
 
-// DELETE /chamados/:id
-router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
-  try {
-    const { rowCount } = await pool.query('DELETE FROM chamados WHERE id = $1', [req.params.id])
-    if (!rowCount) return res.status(404).json({ error: 'Não encontrado.' })
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(500).json({ error: 'Erro interno.' })
+// ── Criar registro na AD_CHAMADO ──────────────────────────────────
+async function criarChamado(chamado) {
+  const p = (v, max = 98) => String(v || '').substring(0, max)
+  const hoje = fmtDate()
+  const meta = chamado.metadados || {}
+
+  console.log('[Sankhya] Tentando saveRecord para', chamado.id)
+
+  // Busca o próximo NUSEQ da sequence
+  const nuseq = await getNextNuseq()
+
+  const localFields = {
+    NUSEQ:        { $: nuseq },
+    IDCHAMADO:    { $: p(chamado.id, 98) },
+    TIPO:         { $: p(chamado.tipo, 98) },
+    TITULO:       { $: p(chamado.titulo, 98) },
+    STATUS:       { $: p(chamado.status || 'aguardando', 98) },
+    VALOR:        { $: Number(chamado.valor || 0) },
+    SOLICITANTE:  { $: p(chamado.solicitante, 98) },
+    EMAILSOLICIT: { $: p(chamado.email, 98) },
+    AUTOREMAIL:   { $: p(chamado.autor_email, 98) },
+    AUTORNOME:    { $: p(chamado.autor_nome, 98) },
+    APROVADOR:    { $: p(chamado.aprovador, 98) },
+    CENTROCUSTO:  { $: p(chamado.centro_custo, 98) },
+    OBS:          { $: p(chamado.obs, 98) },
+    DTABERTURA:   { $: hoje },
+    SYNKOK:       { $: 'S' },
+    ...buildMetaCampos(chamado.tipo, meta),
   }
-})
 
-// POST /chamados/:id/sync-sankhya — força reenvio ao Sankhya
-router.post('/:id/sync-sankhya', requireAuth, requireAdmin, async (req, res) => {
-  if (!SANKHYA_ON()) return res.status(400).json({ error: 'Sankhya não configurado.' })
-  try {
-    const { rows } = await pool.query('SELECT * FROM chamados WHERE id = $1', [req.params.id])
-    if (!rows.length) return res.status(404).json({ error: 'Não encontrado.' })
-    const c = rows[0]
-    await sankhya.criarChamado({ ...c, metadados: c.metadados || {} })
-    await pool.query('UPDATE chamados SET sankhya = true WHERE id = $1', [req.params.id])
-    res.json({ ok: true, message: 'Chamado sincronizado com Sankhya.' })
-  } catch (e) {
-    res.status(500).json({ error: 'Erro ao sincronizar: ' + e.message })
+  console.log('[Sankhya] Payload localFields:', JSON.stringify(localFields, null, 2))
+
+  return sankhyaRequest('CRUDServiceProvider.saveRecord', {
+    dataSet: {
+      rootEntity: 'AD_CHAMADO',
+      includePresentationFields: 'N',
+      dataRow: {
+        localFields,
+      },
+    },
+  })
+}
+
+// ── Atualizar status na AD_CHAMADO ────────────────────────────────
+async function atualizarStatus(nuseq, id, status) {
+  return sankhyaRequest('CRUDServiceProvider.saveRecord', {
+    dataSet: {
+      rootEntity: 'AD_CHAMADO',
+      includePresentationFields: 'N',
+      dataRow: {
+        localFields: {
+          NUSEQ:         { $: Number(nuseq) },
+          STATUS:        { $: String(status) },
+          DTATUALIZACAO: { $: fmtDate() },
+        },
+      },
+    },
+  })
+}
+
+// ── Buscar NUSEQ pelo IDCHAMADO ───────────────────────────────────
+async function buscarNuseq(idChamado) {
+  const data = await sankhyaRequest('DbExplorerSP.executeQuery', {
+    sql: `SELECT NUSEQ FROM AD_CHAMADO WHERE IDCHAMADO = '${idChamado.replace(/'/g, "''")}'`,
+  })
+
+  const rows = data?.responseBody?.rows
+  if (rows && rows.length && rows[0].length) return Number(rows[0][0])
+
+  const entities = data?.responseBody?.entities?.entity
+  if (entities) {
+    const row = Array.isArray(entities) ? entities[0] : entities
+    return Number(row?.f0?.$) || null
   }
-})
 
-module.exports = router
+  return null
+}
+
+module.exports = { criarChamado, atualizarStatus, buscarNuseq }
