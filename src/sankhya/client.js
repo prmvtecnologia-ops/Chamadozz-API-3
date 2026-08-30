@@ -1,7 +1,5 @@
 /**
  * sankhya/client.js
- * Integração com Sankhya On-Premise (MGE)
- * Host: eduzz.snk.ativy.com:40020
  */
 
 const BASE_URL = process.env.SANKHYA_BASE_URL || 'http://eduzz.snk.ativy.com:40020'
@@ -18,7 +16,7 @@ function fmtDate() {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
 }
 
-// ── Autenticação MGE ──────────────────────────────────────────────
+// ── Autenticação ──────────────────────────────────────────────────
 async function getJWT() {
   if (cachedJWT && Date.now() < jwtExpiresAt) return cachedJWT
 
@@ -28,8 +26,8 @@ async function getJWT() {
     body: JSON.stringify({
       serviceName: 'MobileLoginSP.login',
       requestBody: {
-        NOMUSU: { $: USERNAME },
-        INTERNO: { $: PASSWORD },
+        NOMUSU:        { $: USERNAME },
+        INTERNO:       { $: PASSWORD },
         KEEPCONNECTED: { $: 'S' },
       },
     }),
@@ -39,8 +37,6 @@ async function getJWT() {
   let jwt = data?.responseBody?.jsessionid?.$
   if (!jwt) {
     const setCookie = res.headers.get('set-cookie')
-    console.log('[Sankhya] Login body:', JSON.stringify(data).substring(0, 300))
-    console.log('[Sankhya] set-cookie:', setCookie?.substring(0, 150))
     if (setCookie) {
       const match = setCookie.match(/JSESSIONID=([^;]+)/)
       if (match) jwt = match[1]
@@ -57,7 +53,6 @@ async function getJWT() {
 // ── Requisição genérica ───────────────────────────────────────────
 async function sankhyaRequest(serviceName, requestBody) {
   const jwt = await getJWT()
-
   console.log(`[Sankhya] Chamando ${serviceName}...`)
 
   const controller = new AbortController()
@@ -82,45 +77,61 @@ async function sankhyaRequest(serviceName, requestBody) {
   console.log(`[Sankhya] Resposta ${serviceName} (${res.status}):`, text.substring(0, 500))
 
   let data
-  try { data = JSON.parse(text) } catch(e) { throw new Error(`Sankhya resposta inválida: ${text.substring(0,200)}`) }
+  try { data = JSON.parse(text) } catch(e) {
+    throw new Error(`Sankhya resposta inválida: ${text.substring(0, 200)}`)
+  }
 
   if (data?.status === '1' || data?.responseBody) return data
   const errMsg = JSON.stringify(data?.statusMessage || data?.error || data)
   throw new Error(`Sankhya [${serviceName}] erro: ${errMsg}`)
 }
 
+// ── Campos extras por tipo ────────────────────────────────────────
+function buildMetaCampos(tipo, meta) {
+  const p = (v, max = 98) => String(v || '').substring(0, max)
+  switch (tipo) {
+    case 'Viagem': return {
+      VGORIGEM:  { $: p(meta.origem) },
+      VGDESTINO: { $: p(meta.destino) },
+      VGMODAL:   { $: p(meta.modal) },
+      VGHOTEL:   { $: p(meta.hotel_rede) },
+    }
+    case 'Reembolso': return {
+      RBPERIODO:  { $: p(meta.periodo) },
+      RBTITULAR:  { $: p(meta.titular) },
+      RBCPF:      { $: p(meta.cpf) },
+      RBBANCO:    { $: p(meta.banco) },
+      RBAGENCIA:  { $: p(meta.agencia) },
+      RBCONTA:    { $: p(meta.conta) },
+      RBPIX:      { $: p(meta.pix) },
+    }
+    case 'Pagamento': return {
+      PGFORNECEDOR: { $: p(meta.fornecedor) },
+      PGCNPJ:       { $: p(meta.cnpj) },
+      PGFORMA:      { $: p(meta.forma_pagamento) },
+    }
+    case 'LinhaTeléfonica': return {
+      LTTIPO:      { $: p(meta.tipo_linha) },
+      LTOPERADORA: { $: p(meta.operadora) },
+      LTUSUARIO:   { $: p(meta.usuario_linha) },
+    }
+    case 'Contrato': return {
+      CTCONTRAPARTE: { $: p(meta.contraparte) },
+      CTTIPO:        { $: p(meta.tipo_contrato) },
+      CTURGENCIA:    { $: p(meta.urgencia) },
+      CTLINKDOC:     { $: p(meta.link_doc) },
+    }
+    default: return {}
+  }
+}
+
 // ── Criar registro na AD_CHAMADO ──────────────────────────────────
 async function criarChamado(chamado) {
-  const meta = chamado.metadados || {}
+  const p = (v, max = 98) => String(v || '').substring(0, max)
   const hoje = fmtDate()
+  const meta = chamado.metadados || {}
 
-  const fields = [
-    { name: 'NUSEQ',        $: '0' },
-    { name: 'IDCHAMADO',    $: String(chamado.id || '') },
-    { name: 'TIPO',         $: String(chamado.tipo || '') },
-    { name: 'TITULO',       $: String(chamado.titulo || '').substring(0, 98) },
-    { name: 'STATUS',       $: String(chamado.status || 'aguardando') },
-    { name: 'VALOR',        $: String(Number(chamado.valor || 0).toFixed(2)) },
-    { name: 'SOLICITANTE',  $: String(chamado.solicitante || '').substring(0, 98) },
-    { name: 'EMAILSOLICIT', $: String(chamado.email || '').substring(0, 98) },
-    { name: 'AUTOREMAIL',   $: String(chamado.autor_email || '').substring(0, 98) },
-    { name: 'AUTORNOME',    $: String(chamado.autor_nome || '').substring(0, 98) },
-    { name: 'APROVADOR',    $: String(chamado.aprovador    || '').substring(0, 98) },
-    { name: 'CENTROCUSTO',  $: String(chamado.centro_custo || '').substring(0, 98) },
-    { name: 'OBS',          $: String(chamado.obs          || '').substring(0, 998) },
-    { name: 'DTABERTURA',   $: hoje },
-    { name: 'DTATUALIZACAO',$: hoje },
-    { name: 'SYNKOK',       $: 'S' },
-    ...buildMetaCampos(chamado.tipo, meta),
-  ]
-
-  const filteredFields = fields.filter(f => f.$ !== '' && f.name !== 'NUSEQ')
-
-  console.log('[Sankhya] criarChamado campos:', filteredFields.map(f => f.name).join(', '))
-
-  // Monta objeto de campos para o CRUD
-  const fieldObj = {}
-  filteredFields.forEach(f => { fieldObj[f.name] = { $: f.$ } })
+  console.log('[Sankhya] Tentando saveRecord para', chamado.id)
 
   return sankhyaRequest('CRUDServiceProvider.saveRecord', {
     dataSet: {
@@ -128,14 +139,23 @@ async function criarChamado(chamado) {
       includePresentationFields: 'N',
       dataRow: {
         localFields: {
-          field: filteredFields
+          IDCHAMADO:    { $: p(chamado.id, 29) },
+          TIPO:         { $: p(chamado.tipo, 29) },
+          TITULO:       { $: p(chamado.titulo) },
+          STATUS:       { $: p(chamado.status || 'aguardando', 19) },
+          VALOR:        { $: String(Number(chamado.valor || 0)) },
+          SOLICITANTE:  { $: p(chamado.solicitante) },
+          EMAILSOLICIT: { $: p(chamado.email) },
+          AUTOREMAIL:   { $: p(chamado.autor_email) },
+          AUTORNOME:    { $: p(chamado.autor_nome) },
+          APROVADOR:    { $: p(chamado.aprovador) },
+          CENTROCUSTO:  { $: p(chamado.centro_custo) },
+          OBS:          { $: p(chamado.obs, 998) },
+          DTABERTURA:   { $: hoje },
+          SYNKOK:       { $: 'S' },
+          ...buildMetaCampos(chamado.tipo, meta),
         },
       },
-      entity: {
-        fieldset: {
-          list: filteredFields.map(f => f.name).join(',')
-        }
-      }
     },
   })
 }
@@ -148,11 +168,9 @@ async function atualizarStatus(nuseq, id, status) {
       includePresentationFields: 'N',
       dataRow: {
         localFields: {
-          field: [
-            { name: 'NUSEQ',         $: String(nuseq) },
-            { name: 'STATUS',        $: String(status) },
-            { name: 'DTATUALIZACAO', $: fmtDate() },
-          ],
+          NUSEQ:         { $: String(nuseq) },
+          STATUS:        { $: String(status) },
+          DTATUALIZACAO: { $: fmtDate() },
         },
       },
     },
@@ -179,76 +197,4 @@ async function buscarNuseq(idChamado) {
   return row?.f0?.$ || null
 }
 
-// ── Campos por tipo ───────────────────────────────────────────────
-function buildMetaCampos(tipo, meta) {
-  switch (tipo) {
-    case 'Viagem': return [
-      { name: 'VGORIGEM',    $: meta.origem      || '' },
-      { name: 'VGDESTINO',   $: meta.destino     || '' },
-      { name: 'VGMODAL',     $: meta.modal       || '' },
-      { name: 'VGHOTEL',     $: meta.hotel_rede  || '' },
-    ]
-    case 'Reembolso': return [
-      { name: 'RBPERIODO',   $: meta.periodo  || '' },
-      { name: 'RBTITULAR',   $: meta.titular  || '' },
-      { name: 'RBCPF',       $: meta.cpf      || '' },
-      { name: 'RBBANCO',     $: meta.banco    || '' },
-      { name: 'RBAGENCIA',   $: meta.agencia  || '' },
-      { name: 'RBCONTA',     $: meta.conta    || '' },
-      { name: 'RBPIX',       $: meta.pix      || '' },
-    ]
-    case 'Pagamento': return [
-      { name: 'PGFORNECEDOR',$: meta.fornecedor      || '' },
-      { name: 'PGCNPJ',      $: meta.cnpj            || '' },
-      { name: 'PGFORMA',     $: meta.forma_pagamento || '' },
-    ]
-    case 'LinhaTeléfonica': return [
-      { name: 'LTTIPO',      $: meta.tipo_linha    || '' },
-      { name: 'LTOPERADORA', $: meta.operadora     || '' },
-      { name: 'LTUSUARIO',   $: meta.usuario_linha || '' },
-    ]
-    case 'Contrato': return [
-      { name: 'CTCONTRAPARTE',$: meta.contraparte   || '' },
-      { name: 'CTTIPO',       $: meta.tipo_contrato || '' },
-      { name: 'CTURGENCIA',   $: meta.urgencia      || '' },
-      { name: 'CTLINKDOC',    $: meta.link_doc      || '' },
-    ]
-    default: return []
-  }
-}
-
-module.exports = { criarChamado, atualizarStatus, buscarNuseq }// ── Criar registro na AD_CHAMADO ──────────────────────────────────────────────
-async function criarChamado(chamado) {
-  const p = (v, max=98) => String(v || '').substring(0, max)
-  const hoje = fmtDate()
-
-  console.log('[Sankhya] Tentando saveRecord para', chamado.id)
-
-  // Formato correto do saveRecord Sankhya on-premise
-  return sankhyaRequest('CRUDServiceProvider.saveRecord', {
-    dataSet: {
-      rootEntity: 'AD_CHAMADO',
-      includePresentationFields: 'N',
-      dataRow: {
-        localFields: {
-          IDCHAMADO:    { $: p(chamado.id, 29) },
-          TIPO:         { $: p(chamado.tipo, 29) },
-          TITULO:       { $: p(chamado.titulo) },
-          STATUS:       { $: p(chamado.status || 'aguardando', 19) },
-          VALOR:        { $: String(Number(chamado.valor || 0)) },
-          SOLICITANTE:  { $: p(chamado.solicitante) },
-          EMAILSOLICIT: { $: p(chamado.email) },
-          AUTOREMAIL:   { $: p(chamado.autor_email) },
-          AUTORNOME:    { $: p(chamado.autor_nome) },
-          APROVADOR:    { $: p(chamado.aprovador) },
-          CENTROCUSTO:  { $: p(chamado.centro_custo) },
-          OBS:          { $: p(chamado.obs, 998) },
-          DTABERTURA:   { $: hoje },
-          SYNKOK:       { $: 'S' },
-        }
-      }
-    }
-  })
-}
-
-
+module.exports = { criarChamado, atualizarStatus, buscarNuseq }
