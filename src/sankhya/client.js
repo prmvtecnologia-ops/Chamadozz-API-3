@@ -10,6 +10,7 @@ const PASSWORD = process.env.SANKHYA_PASS
 
 let cachedJWT    = null
 let jwtExpiresAt = 0
+const CACHE_JWT  = false // desabilitado para debug
 
 function fmtDate() {
   const d = new Date()
@@ -17,7 +18,7 @@ function fmtDate() {
 }
 
 async function getJWT() {
-  if (cachedJWT && Date.now() < jwtExpiresAt) return cachedJWT
+  if (CACHE_JWT && cachedJWT && Date.now() < jwtExpiresAt) return cachedJWT
 
   const res = await fetch(`${BASE_URL}/mge/service.sbr?serviceName=MobileLoginSP.login&outputType=json`, {
     method: 'POST',
@@ -45,7 +46,7 @@ async function getJWT() {
 
   cachedJWT    = jwt
   jwtExpiresAt = Date.now() + 25 * 60 * 1000
-  console.log('[Sankhya] Login OK, JWT obtido')
+  console.log('[Sankhya] Login OK, JWT obtido:', jwt.substring(0, 20) + '...')
   return jwt
 }
 
@@ -85,13 +86,11 @@ async function sankhyaRequest(serviceName, requestBody) {
   throw new Error(`Sankhya [${serviceName}] erro: ${errMsg}`)
 }
 
-// ── Buscar próximo NUSEQ via DbExplorerSP (SELECT permitido) ──────
 async function getNextNuseq() {
   const data = await sankhyaRequest('DbExplorerSP.executeQuery', {
     sql: 'SELECT GEN_AD_CHAMADO.NEXTVAL FROM DUAL',
   })
 
-  // Formato 1: rows array
   const rows = data?.responseBody?.rows
   if (rows && rows.length && rows[0].length) {
     const val = rows[0][0]
@@ -99,7 +98,6 @@ async function getNextNuseq() {
     return Number(val)
   }
 
-  // Formato 2: entities
   const entities = data?.responseBody?.entities?.entity
   if (entities) {
     const row = Array.isArray(entities) ? entities[0] : entities
@@ -156,7 +154,6 @@ async function criarChamado(chamado) {
 
   console.log('[Sankhya] Tentando saveRecord para', chamado.id)
 
-  // Pega NUSEQ via SELECT (DbExplorerSP só permite SELECT)
   const nuseq = await getNextNuseq()
   console.log('[Sankhya] NUSEQ para insert:', nuseq)
 
