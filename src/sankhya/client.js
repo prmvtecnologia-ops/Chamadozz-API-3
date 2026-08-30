@@ -1,5 +1,5 @@
 /**
- * sankhya/client.js
+ * src/sankhya/client.js
  */
 
 const BASE_URL = process.env.SANKHYA_BASE_URL || 'http://eduzz.snk.ativy.com:40020'
@@ -16,7 +16,6 @@ function fmtDate() {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
 }
 
-// ── Autenticação ──────────────────────────────────────────────────
 async function getJWT() {
   if (cachedJWT && Date.now() < jwtExpiresAt) return cachedJWT
 
@@ -50,7 +49,6 @@ async function getJWT() {
   return jwt
 }
 
-// ── Requisição genérica ───────────────────────────────────────────
 async function sankhyaRequest(serviceName, requestBody) {
   const jwt = await getJWT()
   console.log(`[Sankhya] Chamando ${serviceName}...`)
@@ -87,7 +85,6 @@ async function sankhyaRequest(serviceName, requestBody) {
   throw new Error(`Sankhya [${serviceName}] erro: ${errMsg}`)
 }
 
-// ── Campos extras por tipo ────────────────────────────────────────
 function buildMetaCampos(tipo, meta) {
   const p = (v, max = 98) => String(v || '').substring(0, max)
   switch (tipo) {
@@ -126,7 +123,6 @@ function buildMetaCampos(tipo, meta) {
   }
 }
 
-// ── Criar registro na AD_CHAMADO ──────────────────────────────────
 async function criarChamado(chamado) {
   const p = (v, max = 98) => String(v || '').substring(0, max)
   const hoje = fmtDate()
@@ -134,7 +130,6 @@ async function criarChamado(chamado) {
 
   console.log('[Sankhya] Tentando saveRecord para', chamado.id)
 
-  // Sem NUSEQ — o trigger TRG_AD_CHAMADO_NUSEQ gera automaticamente
   const localFields = {
     IDCHAMADO:    { $: p(chamado.id, 98) },
     TIPO:         { $: p(chamado.tipo, 98) },
@@ -155,7 +150,7 @@ async function criarChamado(chamado) {
 
   console.log('[Sankhya] Payload localFields:', JSON.stringify(localFields, null, 2))
 
-  return sankhyaRequest('CRUDServiceProvider.saveRecord', {
+  return sankhyaRequest('DataSetSP.save', {
     dataSet: {
       rootEntity: 'AD_CHAMADO',
       includePresentationFields: 'N',
@@ -166,7 +161,6 @@ async function criarChamado(chamado) {
   })
 }
 
-// ── Atualizar status na AD_CHAMADO ────────────────────────────────
 async function atualizarStatus(nuseq, id, status) {
   return sankhyaRequest('CRUDServiceProvider.saveRecord', {
     dataSet: {
@@ -183,7 +177,6 @@ async function atualizarStatus(nuseq, id, status) {
   })
 }
 
-// ── Buscar NUSEQ pelo IDCHAMADO via loadRecords ───────────────────
 async function buscarNuseq(idChamado) {
   const data = await sankhyaRequest('CRUDServiceProvider.loadRecords', {
     dataSet: {
