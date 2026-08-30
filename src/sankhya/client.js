@@ -133,28 +133,32 @@ async function criarChamado(chamado) {
 
   console.log('[Sankhya] Tentando saveRecord para', chamado.id)
 
+  const localFields = {
+    IDCHAMADO:    { $: p(chamado.id, 29) },
+    TIPO:         { $: p(chamado.tipo, 29) },
+    TITULO:       { $: p(chamado.titulo) },
+    STATUS:       { $: p(chamado.status || 'aguardando', 19) },
+    VALOR:        { $: String(Number(chamado.valor || 0)) },
+    SOLICITANTE:  { $: p(chamado.solicitante) },
+    EMAILSOLICIT: { $: p(chamado.email) },
+    AUTOREMAIL:   { $: p(chamado.autor_email) },
+    AUTORNOME:    { $: p(chamado.autor_nome) },
+    APROVADOR:    { $: p(chamado.aprovador) },
+    CENTROCUSTO:  { $: p(chamado.centro_custo) },
+    OBS:          { $: p(chamado.obs, 998) },
+    DTABERTURA:   { $: hoje },
+    SYNKOK:       { $: 'S' },
+    ...buildMetaCampos(chamado.tipo, meta),
+  }
+
+  console.log('[Sankhya] Payload localFields:', JSON.stringify(localFields, null, 2))
+
   return sankhyaRequest('CRUDServiceProvider.saveRecord', {
     dataSet: {
       rootEntity: 'AD_CHAMADO',
       includePresentationFields: 'N',
       dataRow: {
-        localFields: {
-          IDCHAMADO:    { $: p(chamado.id, 29) },
-          TIPO:         { $: p(chamado.tipo, 29) },
-          TITULO:       { $: p(chamado.titulo) },
-          STATUS:       { $: p(chamado.status || 'aguardando', 19) },
-          VALOR:        { $: String(Number(chamado.valor || 0)) },
-          SOLICITANTE:  { $: p(chamado.solicitante) },
-          EMAILSOLICIT: { $: p(chamado.email) },
-          AUTOREMAIL:   { $: p(chamado.autor_email) },
-          AUTORNOME:    { $: p(chamado.autor_nome) },
-          APROVADOR:    { $: p(chamado.aprovador) },
-          CENTROCUSTO:  { $: p(chamado.centro_custo) },
-          OBS:          { $: p(chamado.obs, 998) },
-          DTABERTURA:   { $: hoje },
-          SYNKOK:       { $: 'S' },
-          ...buildMetaCampos(chamado.tipo, meta),
-        },
+        localFields,
       },
     },
   })
