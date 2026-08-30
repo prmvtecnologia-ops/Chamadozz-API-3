@@ -1,6 +1,6 @@
 const router  = require('express').Router()
 const pool    = require('../db/pool')
-const sankhya = require('../sankhya')
+const sankhya = require('../sankhya/client')
 const { requireAuth, requireAdmin } = require('../middleware/auth')
 
 const SANKHYA_ON = () => !!(
