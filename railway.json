@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "pkill -f 'node src/index.js' 2>/dev/null; sleep 2; npm run migrate && npm run seed && npm start",
+    "startCommand": "npm run migrate && npm run seed && node src/index.js 2>&1",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
