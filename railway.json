@@ -4,6 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npm run migrate && npm run seed && node -e \"try { require('./src/index.js') } catch(e) { console.error('ERRO:', e.message, e.stack); process.exit(1) }\""
+    "startCommand": "npm run migrate && npm run seed && npm start",
+    "restartPolicyType": "NEVER"
   }
 }
