@@ -85,6 +85,32 @@ async function sankhyaRequest(serviceName, requestBody) {
   throw new Error(`Sankhya [${serviceName}] erro: ${errMsg}`)
 }
 
+// ── Buscar próximo NUSEQ via DbExplorerSP (SELECT permitido) ──────
+async function getNextNuseq() {
+  const data = await sankhyaRequest('DbExplorerSP.executeQuery', {
+    sql: 'SELECT GEN_AD_CHAMADO.NEXTVAL FROM DUAL',
+  })
+
+  // Formato 1: rows array
+  const rows = data?.responseBody?.rows
+  if (rows && rows.length && rows[0].length) {
+    const val = rows[0][0]
+    console.log('[Sankhya] NUSEQ obtido (rows):', val)
+    return Number(val)
+  }
+
+  // Formato 2: entities
+  const entities = data?.responseBody?.entities?.entity
+  if (entities) {
+    const row = Array.isArray(entities) ? entities[0] : entities
+    const val = row?.f0?.$
+    console.log('[Sankhya] NUSEQ obtido (entities):', val)
+    return Number(val)
+  }
+
+  throw new Error('Sankhya: não foi possível obter NUSEQ da sequence')
+}
+
 function buildMetaCampos(tipo, meta) {
   const p = (v, max = 98) => String(v || '').substring(0, max)
   switch (tipo) {
@@ -130,7 +156,12 @@ async function criarChamado(chamado) {
 
   console.log('[Sankhya] Tentando saveRecord para', chamado.id)
 
+  // Pega NUSEQ via SELECT (DbExplorerSP só permite SELECT)
+  const nuseq = await getNextNuseq()
+  console.log('[Sankhya] NUSEQ para insert:', nuseq)
+
   const localFields = {
+    NUSEQ:        { $: nuseq },
     IDCHAMADO:    { $: p(chamado.id, 98) },
     TIPO:         { $: p(chamado.tipo, 98) },
     TITULO:       { $: p(chamado.titulo, 98) },
@@ -150,7 +181,7 @@ async function criarChamado(chamado) {
 
   console.log('[Sankhya] Payload localFields:', JSON.stringify(localFields, null, 2))
 
-  return sankhyaRequest('DataSetSP.save', {
+  return sankhyaRequest('CRUDServiceProvider.saveRecord', {
     dataSet: {
       rootEntity: 'AD_CHAMADO',
       includePresentationFields: 'N',
