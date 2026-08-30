@@ -136,12 +136,11 @@ async function criarChamado(chamado) {
   console.log('[Sankhya] Tentando saveRecord para', chamado.id)
 
   const localFields = {
-    NUSEQ:        { $: '0' },                              // 0 = insert novo
     IDCHAMADO:    { $: p(chamado.id, 98) },
     TIPO:         { $: p(chamado.tipo, 98) },
     TITULO:       { $: p(chamado.titulo, 98) },
     STATUS:       { $: p(chamado.status || 'aguardando', 98) },
-    VALOR:        { $: Number(chamado.valor || 0) },       // ← FLOAT: número, não string
+    VALOR:        { $: Number(chamado.valor || 0) },
     SOLICITANTE:  { $: p(chamado.solicitante, 98) },
     EMAILSOLICIT: { $: p(chamado.email, 98) },
     AUTOREMAIL:   { $: p(chamado.autor_email, 98) },
@@ -175,7 +174,7 @@ async function atualizarStatus(nuseq, id, status) {
       includePresentationFields: 'N',
       dataRow: {
         localFields: {
-          NUSEQ:         { $: Number(nuseq) },             // ← NUMBER: número, não string
+          NUSEQ:         { $: Number(nuseq) },
           STATUS:        { $: String(status) },
           DTATUALIZACAO: { $: fmtDate() },
         },
