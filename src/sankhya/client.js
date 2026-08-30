@@ -89,86 +89,75 @@ function esc(v, max = 98) {
   return String(v || '').replace(/'/g, "''").substring(0, max)
 }
 
-function buildMetaParams(tipo, meta) {
-  const e = (v) => esc(v)
-  switch (tipo) {
-    case 'Viagem': return `
-      UPDATE AD_CHAMADO SET
-        VGORIGEM  = '${e(meta.origem)}',
-        VGDESTINO = '${e(meta.destino)}',
-        VGMODAL   = '${e(meta.modal)}',
-        VGHOTEL   = '${e(meta.hotel_rede)}'
-      WHERE IDCHAMADO = '`
-    case 'Reembolso': return `
-      UPDATE AD_CHAMADO SET
-        RBPERIODO = '${e(meta.periodo)}',
-        RBTITULAR = '${e(meta.titular)}',
-        RBCPF     = '${e(meta.cpf)}',
-        RBBANCO   = '${e(meta.banco)}',
-        RBAGENCIA = '${e(meta.agencia)}',
-        RBCONTA   = '${e(meta.conta)}',
-        RBPIX     = '${e(meta.pix)}'
-      WHERE IDCHAMADO = '`
-    case 'Pagamento': return `
-      UPDATE AD_CHAMADO SET
-        PGFORNECEDOR = '${e(meta.fornecedor)}',
-        PGCNPJ       = '${e(meta.cnpj)}',
-        PGFORMA      = '${e(meta.forma_pagamento)}'
-      WHERE IDCHAMADO = '`
-    case 'LinhaTeléfonica': return `
-      UPDATE AD_CHAMADO SET
-        LTTIPO      = '${e(meta.tipo_linha)}',
-        LTOPERADORA = '${e(meta.operadora)}',
-        LTUSUARIO   = '${e(meta.usuario_linha)}'
-      WHERE IDCHAMADO = '`
-    case 'Contrato': return `
-      UPDATE AD_CHAMADO SET
-        CTCONTRAPARTE = '${e(meta.contraparte)}',
-        CTTIPO        = '${e(meta.tipo_contrato)}',
-        CTURGENCIA    = '${e(meta.urgencia)}',
-        CTLINKDOC     = '${e(meta.link_doc)}'
-      WHERE IDCHAMADO = '`
-    default: return null
-  }
+async function execSelect(sql) {
+  return sankhyaRequest('DbExplorerSP.executeQuery', { sql })
 }
 
 async function criarChamado(chamado) {
   const hoje = fmtDate()
   const meta = chamado.metadados || {}
 
-  console.log('[Sankhya] Tentando INSERT via procedure para', chamado.id)
+  console.log('[Sankhya] Tentando INSERT via FNC para', chamado.id)
 
   const sql = `
-    BEGIN
-      PRC_INSERT_AD_CHAMADO(
-        '${esc(chamado.id)}',
-        '${esc(chamado.tipo)}',
-        '${esc(chamado.titulo)}',
-        '${esc(chamado.status || 'aguardando')}',
-        ${Number(chamado.valor || 0)},
-        '${esc(chamado.solicitante)}',
-        '${esc(chamado.email)}',
-        '${esc(chamado.autor_email)}',
-        '${esc(chamado.autor_nome)}',
-        '${esc(chamado.aprovador)}',
-        '${esc(chamado.centro_custo)}',
-        '${esc(chamado.obs)}',
-        TO_DATE('${hoje}', 'DD/MM/YYYY'),
-        'S'
-      );
-    END;
+    SELECT FNC_INSERT_AD_CHAMADO(
+      '${esc(chamado.id)}',
+      '${esc(chamado.tipo)}',
+      '${esc(chamado.titulo)}',
+      '${esc(chamado.status || "aguardando")}',
+      ${Number(chamado.valor || 0)},
+      '${esc(chamado.solicitante)}',
+      '${esc(chamado.email)}',
+      '${esc(chamado.autor_email)}',
+      '${esc(chamado.autor_nome)}',
+      '${esc(chamado.aprovador)}',
+      '${esc(chamado.centro_custo)}',
+      '${esc(chamado.obs)}',
+      TO_DATE('${hoje}', 'DD/MM/YYYY'),
+      'S'
+    ) FROM DUAL
   `
 
-  console.log('[Sankhya] SQL procedure:', sql)
+  console.log('[Sankhya] SQL INSERT:', sql)
+  const result = await execSelect(sql)
 
-  const result = await sankhyaRequest('DbExplorerSP.executeQuery', { sql })
+  const rows = result?.responseBody?.rows
+  if (rows && rows[0] && rows[0][0] === -1) {
+    throw new Error('Sankhya: FNC_INSERT_AD_CHAMADO retornou erro')
+  }
 
-  // Se tem campos de tipo específico, faz UPDATE
-  const metaSql = buildMetaParams(chamado.tipo, meta)
-  if (metaSql) {
-    const updateSql = `BEGIN ${metaSql}${esc(chamado.id)}'; END;`
-    console.log('[Sankhya] SQL update meta:', updateSql)
-    await sankhyaRequest('DbExplorerSP.executeQuery', { sql: updateSql })
+  // Atualiza campos de tipo específico
+  const tipo = chamado.tipo
+  if (['Viagem','Reembolso','Pagamento','LinhaTeléfonica','Contrato'].includes(tipo)) {
+    const metaSql = `
+      SELECT FNC_UPDATE_AD_CHAMADO_META(
+        '${esc(chamado.id)}',
+        '${esc(tipo)}',
+        '${esc(meta.origem)}',
+        '${esc(meta.destino)}',
+        '${esc(meta.modal)}',
+        '${esc(meta.hotel_rede)}',
+        '${esc(meta.periodo)}',
+        '${esc(meta.titular)}',
+        '${esc(meta.cpf)}',
+        '${esc(meta.banco)}',
+        '${esc(meta.agencia)}',
+        '${esc(meta.conta)}',
+        '${esc(meta.pix)}',
+        '${esc(meta.fornecedor)}',
+        '${esc(meta.cnpj)}',
+        '${esc(meta.forma_pagamento)}',
+        '${esc(meta.tipo_linha)}',
+        '${esc(meta.operadora)}',
+        '${esc(meta.usuario_linha)}',
+        '${esc(meta.contraparte)}',
+        '${esc(meta.tipo_contrato)}',
+        '${esc(meta.urgencia)}',
+        '${esc(meta.link_doc)}'
+      ) FROM DUAL
+    `
+    console.log('[Sankhya] SQL META:', metaSql)
+    await execSelect(metaSql)
   }
 
   return result
@@ -177,32 +166,23 @@ async function criarChamado(chamado) {
 async function atualizarStatus(nuseq, id, status) {
   const hoje = fmtDate()
   const sql = `
-    BEGIN
-      UPDATE AD_CHAMADO
-      SET STATUS = '${esc(status)}',
-          DTATUALIZACAO = TO_DATE('${hoje}', 'DD/MM/YYYY')
-      WHERE NUSEQ = ${Number(nuseq)};
-      COMMIT;
-    END;
+    SELECT FNC_UPDATE_AD_CHAMADO_STATUS(
+      ${Number(nuseq)},
+      '${esc(status)}',
+      TO_DATE('${hoje}', 'DD/MM/YYYY')
+    ) FROM DUAL
   `
-  console.log('[Sankhya] SQL atualizarStatus:', sql)
-  return sankhyaRequest('DbExplorerSP.executeQuery', { sql })
+  console.log('[Sankhya] SQL STATUS:', sql)
+  return execSelect(sql)
 }
 
 async function buscarNuseq(idChamado) {
-  const data = await sankhyaRequest('DbExplorerSP.executeQuery', {
-    sql: `SELECT NUSEQ FROM AD_CHAMADO WHERE IDCHAMADO = '${esc(idChamado)}'`,
-  })
+  const data = await execSelect(
+    `SELECT NUSEQ FROM AD_CHAMADO WHERE IDCHAMADO = '${esc(idChamado)}'`
+  )
 
   const rows = data?.responseBody?.rows
   if (rows && rows.length && rows[0].length) return Number(rows[0][0])
-
-  const entities = data?.responseBody?.entities?.entity
-  if (entities) {
-    const row = Array.isArray(entities) ? entities[0] : entities
-    return Number(row?.f0?.$) || null
-  }
-
   return null
 }
 
